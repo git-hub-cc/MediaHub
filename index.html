@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的媒体库</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 新增：设置按钮 -->
+<button id="settings-button" class="global-button" title="设置">⚙️</button>
+
+<!-- 修改：设置侧边栏 -->
+<div id="settings-panel">
+  <div class="settings-header">
+    <h2>设置</h2>
+    <button id="settings-close-button" class="close-button-small">×</button>
+  </div>
+  <div class="settings-content">
+    <!-- --- MODIFICATION START --- -->
+    <div class="setting-item">
+      <label>资源播放路径 (可配置多个)</label>
+      <p class="setting-description">配置一个或多个备用播放路径，将轮流替换 strm 文件中的默认前缀 (http://xiaoya.host:5678)。</p>
+      <div id="base-url-list">
+        <!-- URL items will be dynamically inserted here by JS -->
+      </div>
+      <button id="add-base-url-button" class="button-add-item">+ 新增路径</button>
+      <span id="save-status"></span>
+    </div>
+    <!-- --- MODIFICATION END --- -->
+    <div class="setting-item">
+      <label>元数据索引</label>
+      <p class="setting-description">读取所有NFO文件以启用高级筛选和搜索。此过程可能需要一些时间，结果将缓存在浏览器中。</p>
+      <button id="build-index-button">构建/重建索引</button>
+      <span id="index-status"></span>
+    </div>
+  </div>
+</div>
+<!-- 新增：设置面板遮罩 -->
+<div id="settings-overlay"></div>
+
+<header>
+  <h1>我的媒体库</h1>
+  <nav>
+    <input type="search" id="search-box" placeholder="搜索影视、人物...">
+  </nav>
+</header>
+
+<main>
+  <div id="filter-status" style="display: none;">
+    <span id="filter-text"></span>
+    <button id="clear-filter" title="清除筛选">×</button>
+  </div>
+  <div id="grid-container-wrapper">
+    <div id="movie-grid" class="grid-container"></div>
+  </div>
+  <div id="loading-indicator">正在加载更多...</div>
+</main>
+
+<!-- 详情弹窗 Modal -->
+<div id="details-modal" class="modal">
+  <span class="close-button">×</span>
+  <div class="modal-content">
+    <div id="modal-fanart" class="fanart-bg"></div>
+    <div class="details-header">
+      <div id="modal-poster" class="details-poster"></div>
+      <div class="details-title-section">
+        <h2 id="modal-title"></h2>
+        <div id="modal-meta"></div>
+        <div id="modal-directors-writers"></div>
+      </div>
+    </div>
+    <div class="details-body">
+      <div id="modal-collection-link"></div>
+      <h3>剧情简介</h3>
+      <div id="modal-plot"></div>
+      <div id="modal-cast"></div>
+      <div id="modal-studios"></div>
+      <div id="modal-stream-details"></div>
+      <div id="modal-versions"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 播放器选择弹窗 -->
+<div id="player-modal" class="modal-small">
+  <div class="modal-small-content">
+    <span class="close-button-small">×</span>
+    <h4>选择播放方式</h4>
+    <div id="player-options"></div>
+    <div class="path-display">
+      <p>媒体路径 (可直接复制)</p>
+      <input type="text" id="playback-path-input" readonly>
+      <button id="copy-path-button">复制</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast 通知 -->
+<div id="app-install-toast" class="toast"></div>
+
+<!-- ============================================= -->
+<!--                 HTML 模板                     -->
+<!-- ============================================= -->
+<div id="templates" style="display: none;">
+
+  <!-- 电影卡片模板 -->
+  <template id="movie-card-template">
+    <div class="card movie-card">
+      <!-- 微小调整：添加了 onerror 事件，以防图片链接失效 -->
+      <img src="" alt="" loading="lazy" onerror="this.onerror=null;this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxODAiIGhlaWdodD0iMjcwIiB2aWV3Qm94PSIwIDAgMTgwIDI3MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzFlMWUxZSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjN2Y3ZjdmIiBmb250LXNpemU9IjE2cHgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGFsaWdubWVudC1iYXNlbGluZT0ibWlkZGxlIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';">
+      <div class="title-overlay"></div>
+    </div>
+  </template>
+
+  <!-- 播放器选项按钮模板 -->
+  <template id="player-option-template">
+    <button></button>
+  </template>
+
+  <!-- 合集横幅模板 -->
+  <template id="collection-banner-template">
+    <div class="collection-banner">
+      <img class="collection-poster" src="" alt="">
+      <div class="collection-info">
+        <span>所属合集</span>
+        <p></p>
+      </div>
+    </div>
+  </template>
+
+  <!-- 演员信息模板 -->
+  <template id="cast-member-template">
+    <div class="cast-member">
+      <img src="" alt="" loading="lazy">
+      <div class="name"></div>
+      <div class="role"></div>
+    </div>
+  </template>
+
+  <!-- 制片厂图标模板 -->
+  <template id="studio-item-template">
+    <div class="studio-item">
+      <img src="" alt="" title="">
+    </div>
+  </template>
+
+  <!-- 可用版本条目模板 -->
+  <template id="version-item-template">
+    <div class="version-item"></div>
+  </template>
+
+  <!-- 音视频信息框模板 -->
+  <template id="stream-info-box-template">
+    <div class="stream-info-box">
+      <h4></h4>
+      <div class="details"></div>
+    </div>
+  </template>
+
+  <!-- --- MODIFICATION START --- -->
+  <!-- Base URL 输入行模板 -->
+  <template id="base-url-item-template">
+    <div class="base-url-item">
+      <input type="text" placeholder="http://example.com:5678">
+      <button class="delete-url-button" title="删除此路径">×</button>
+    </div>
+  </template>
+  <!-- --- MODIFICATION END --- -->
+
+</div>
+
+<!-- 引入主JS文件，类型为 "module" -->
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
