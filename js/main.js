@@ -76,6 +76,27 @@ const ui = {
     }
 };
 
+// --- 新增：数组随机排序函数 (Fisher-Yates Shuffle) ---
+/**
+ * 使用 Fisher-Yates (aka Knuth) 算法对数组进行原地随机排序。
+ * @param {Array} array 要排序的数组。
+ */
+function shuffleArray(array) {
+    let currentIndex = array.length, randomIndex;
+
+    // 当仍有元素需要排序时
+    while (currentIndex !== 0) {
+        // 挑选一个剩余元素
+        randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex--;
+
+        // 并与当前元素交换
+        [array[currentIndex], array[randomIndex]] = [
+            array[randomIndex], array[currentIndex]];
+    }
+    return array;
+}
+
 // --- NFO 解析函数 (无变化) ---
 async function parseNFO(nfoPath) {
     try {
@@ -232,7 +253,7 @@ function appendMovies(batch) {
     ui.movieGrid.appendChild(fragment);
 }
 
-// --- 数据获取与初始化 (无变化) ---
+// --- 数据获取与初始化 (已修改) ---
 async function initialize() {
     ui.loadingIndicator.textContent = '正在初始化数据...';
     ui.loadingIndicator.style.display = 'block';
@@ -278,6 +299,10 @@ async function initialize() {
             fullMovies = baseMovies;
             ui.indexStatus.textContent = '加载索引失败，请重新构建。';
         }
+
+        // --- 核心修改：在将数据用于显示前，先对其进行随机排序 ---
+        shuffleArray(fullMovies);
+        // --- 修改结束 ---
 
         allMovies = [...fullMovies];
 
@@ -469,7 +494,7 @@ function getPersonImage(personName) {
     return key ? allPeople[key] : placeholderActor;
 }
 
-// --- 播放器弹窗 (已修改) ---
+// --- 播放器弹窗 (无变化) ---
 async function showPlayerModal(strmPath) {
     document.body.classList.add('body-no-scroll');
     ui.playerModal.style.display = 'flex';
@@ -546,7 +571,7 @@ async function showMovieDetails(movie) {
     [
         ui.modalContent.poster, ui.modalContent.meta, ui.modalContent.directorsWriters,
         ui.modalContent.collectionLink, ui.modalContent.plot, ui.modalContent.cast,
-        ui.modalContent.studios, ui.modalContent.streamDetails, ui.modalContent.versions
+        ui.modalContent.studios, /* ui.modalContent.streamDetails, */ ui.modalContent.versions
     ].forEach(clearContent);
 
     const { files: fileList = [], metadata = {} } = movie;
@@ -653,6 +678,7 @@ async function showMovieDetails(movie) {
     document.body.classList.add('body-no-scroll');
     ui.modal.style.display = 'block';
 
+    /*
     const renderStreamDetails = (streamData) => {
         if (!streamData || (!streamData.video?.length && !streamData.audio?.length && !streamData.subtitle?.length)) return;
 
@@ -681,9 +707,10 @@ async function showMovieDetails(movie) {
         });
         gridContainer.appendChild(fragment);
     };
+    */
 
     if (streams) {
-        renderStreamDetails(streams);
+        // renderStreamDetails(streams);
     } else if (mainFile.nfo) {
         const nfoData = await parseNFO(mainFile.nfo);
         if (nfoData) {
@@ -692,7 +719,7 @@ async function showMovieDetails(movie) {
             if (nfoData.director.length) fallbackDwHtml += `<p><strong>导演:</strong> ${nfoData.director.join(', ')}</p>`;
             if (nfoData.writer.length) fallbackDwHtml += `<p><strong>编剧:</strong> ${nfoData.writer.join(', ')}</p>`;
             ui.modalContent.directorsWriters.innerHTML = fallbackDwHtml;
-            renderStreamDetails(nfoData.streams);
+            // renderStreamDetails(nfoData.streams);
         }
     }
 }
