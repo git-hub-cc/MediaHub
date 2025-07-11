@@ -18,7 +18,7 @@ def scan_studio_directory(directory_path, base_working_dir):
         studio_path = os.path.join(directory_path, studio_name)
         if os.path.isdir(studio_path):
             # 查找可能的logo文件
-            for logo_file in ['landscape.jpg', 'logo.png', 'folder.jpg', 'folder.png']:
+            for logo_file in ['landscape.jpg', 'landscape.png','logo.png', 'folder.jpg', 'folder.png']:
                 logo_path = os.path.join(studio_path, logo_file)
                 if os.path.exists(logo_path):
                     # 从项目根目录计算相对路径

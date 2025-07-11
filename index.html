@@ -18,7 +18,6 @@
     <button id="settings-close-button" class="close-button-small">×</button>
   </div>
   <div class="settings-content">
-    <!-- --- MODIFICATION START --- -->
     <div class="setting-item">
       <label>资源播放路径 (可配置多个)</label>
       <p class="setting-description">配置一个或多个备用播放路径，将轮流替换 strm 文件中的默认前缀 (http://xiaoya.host:5678)。</p>
@@ -28,14 +27,7 @@
       <button id="add-base-url-button" class="button-add-item">+ 新增路径</button>
       <span id="save-status"></span>
     </div>
-    <!-- --- MODIFICATION END --- -->
-    <div class="setting-item">
-      <label>元数据索引</label>
-      <p class="setting-description">读取所有NFO文件以启用高级筛选和搜索。此过程可能需要一些时间，结果将缓存在浏览器中。</p>
-      <button id="build-index-button">构建/重建索引</button>
-      <span id="index-status"></span>
-    </div>
-    <!-- --- MODIFICATION START --- -->
+    <!-- 元数据索引模块已被删除 -->
     <div class="setting-item acknowledgments-section">
       <label>数据来源与致谢</label>
       <p class="setting-description">
@@ -46,7 +38,6 @@
         衷心感谢他们的卓越贡献。
       </p>
     </div>
-    <!-- --- MODIFICATION END --- -->
   </div>
 </div>
 <!-- 新增：设置面板遮罩 -->
@@ -55,7 +46,7 @@
 <header>
   <h1>我的媒体库</h1>
   <nav>
-    <input type="search" id="search-box" placeholder="搜索影视、人物...">
+    <input type="search" id="search-box" placeholder="搜索影视...">
   </nav>
 </header>
 
@@ -120,7 +111,6 @@
   <!-- 电影卡片模板 -->
   <template id="movie-card-template">
     <div class="card movie-card">
-      <!-- 微小调整：添加了 onerror 事件，以防图片链接失效 -->
       <img src="" alt="" loading="lazy" onerror="this.onerror=null;this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxODAiIGhlaWdodD0iMjcwIiB2aWV3Qm94PSIwIDAgMTgwIDI3MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzFlMWUxZSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjN2Y3ZjdmIiBmb250LXNpemU9IjE2cHgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGFsaWdubWVudC1iYXNlbGluZT0ibWlkZGxlIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';">
       <div class="title-overlay"></div>
     </div>
@@ -171,7 +161,6 @@
     </div>
   </template>
 
-  <!-- --- MODIFICATION START --- -->
   <!-- Base URL 输入行模板 -->
   <template id="base-url-item-template">
     <div class="base-url-item">
@@ -179,7 +168,6 @@
       <button class="delete-url-button" title="删除此路径">×</button>
     </div>
   </template>
-  <!-- --- MODIFICATION END --- -->
 
 </div>
 

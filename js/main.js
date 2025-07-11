@@ -2,7 +2,7 @@
 
 import { InfiniteScroller } from './virtual-scroll.js';
 import { BATCH_SIZE, placeholderImage, placeholderActor } from './constants.js';
-import { saveMovies, getMovies, clearMovies } from './indexedDBHelper.js';
+// 移除了 indexedDBHelper 的导入
 
 // --- 全局数据存储 ---
 let allMovies = [], fullMovies = [];
@@ -22,7 +22,7 @@ const settings = {
 };
 let baseUrlRoundRobinIndex = 0;
 const DEFAULT_URL_PREFIX = 'http://xiaoya.host:5678';
-const INDEX_TIMESTAMP_KEY = 'mediaLibraryIndexTimestamp';
+// 移除了 INDEX_TIMESTAMP_KEY
 
 // --- DOM 元素获取 ---
 const ui = {
@@ -57,12 +57,10 @@ const ui = {
     settingsPanel: document.getElementById('settings-panel'),
     settingsCloseButton: document.getElementById('settings-close-button'),
     settingsOverlay: document.getElementById('settings-overlay'),
-    // 移除旧的 settingsBaseUrlInput，添加新的元素引用
     settingsBaseUrlList: document.getElementById('base-url-list'),
     addBaseUrlButton: document.getElementById('add-base-url-button'),
     saveStatus: document.getElementById('save-status'),
-    buildIndexButton: document.getElementById('build-index-button'),
-    indexStatus: document.getElementById('index-status'),
+    // 移除了 buildIndexButton 和 indexStatus 的引用
     // 优化：缓存模板引用
     templates: {
         movieCard: document.getElementById('movie-card-template'),
@@ -76,28 +74,19 @@ const ui = {
     }
 };
 
-// --- 新增：数组随机排序函数 (Fisher-Yates Shuffle) ---
-/**
- * 使用 Fisher-Yates (aka Knuth) 算法对数组进行原地随机排序。
- * @param {Array} array 要排序的数组。
- */
+// --- 数组随机排序函数 (Fisher-Yates Shuffle) ---
 function shuffleArray(array) {
     let currentIndex = array.length, randomIndex;
-
-    // 当仍有元素需要排序时
     while (currentIndex !== 0) {
-        // 挑选一个剩余元素
         randomIndex = Math.floor(Math.random() * currentIndex);
         currentIndex--;
-
-        // 并与当前元素交换
         [array[currentIndex], array[randomIndex]] = [
             array[randomIndex], array[currentIndex]];
     }
     return array;
 }
 
-// --- NFO 解析函数 (无变化) ---
+// --- NFO 解析函数 (保留，用于详情页 fallback) ---
 async function parseNFO(nfoPath) {
     try {
         const response = await fetch(nfoPath);
@@ -137,7 +126,7 @@ async function parseNFO(nfoPath) {
     }
 }
 
-// --- UI 辅助函数 (无变化) ---
+// --- UI 辅助函数 ---
 function showToast(message, duration = 7000) {
     clearTimeout(toastTimeout);
     ui.appInstallToast.innerHTML = message;
@@ -147,7 +136,7 @@ function showToast(message, duration = 7000) {
     }, duration);
 }
 
-// --- 智能播放器调用 (无变化) ---
+// --- 智能播放器调用 ---
 function invokePlayer({ scheme, fallbackUrl, name }) {
     let handlerFired = false;
     const blurHandler = () => { handlerFired = true; };
@@ -161,7 +150,7 @@ function invokePlayer({ scheme, fallbackUrl, name }) {
     window.location.href = scheme;
 }
 
-// --- 设置逻辑 (无变化) ---
+// --- 设置逻辑 ---
 let saveStatusTimeout;
 let saveDebounceTimeout;
 
@@ -223,14 +212,14 @@ function toggleSettingsPanel(show) {
     ui.settingsOverlay.classList.toggle('show', show);
 }
 
-// --- 统一的模态框关闭函数 (无变化) ---
+// --- 统一的模态框关闭函数 ---
 function hideAllModals() {
     ui.modal.style.display = 'none';
     ui.playerModal.style.display = 'none';
     document.body.classList.remove('body-no-scroll');
 }
 
-// --- 渲染函数 (无变化) ---
+// --- 渲染函数 ---
 function appendMovies(batch) {
     const fragment = document.createDocumentFragment();
     const template = ui.templates.movieCard.content;
@@ -253,7 +242,7 @@ function appendMovies(batch) {
     ui.movieGrid.appendChild(fragment);
 }
 
-// --- 数据获取与初始化 (已修改) ---
+// --- 数据获取与初始化 (已简化) ---
 async function initialize() {
     ui.loadingIndicator.textContent = '正在初始化数据...';
     ui.loadingIndicator.style.display = 'block';
@@ -265,6 +254,7 @@ async function initialize() {
         ]);
         if (!movieRes.ok || !peopleRes.ok || !collectionRes.ok || !studioRes.ok) throw new Error('部分或全部数据文件加载失败');
 
+        // 直接从 JSON 加载电影数据
         const baseMovies = (await movieRes.json()).map(movie => {
             if (movie.files && !Array.isArray(movie.files)) {
                 movie.files = [movie.files];
@@ -272,37 +262,10 @@ async function initialize() {
             return movie;
         });
 
-        let indexedData = null;
+        fullMovies = baseMovies;
 
-        try {
-            indexedData = await getMovies();
-            const indexTimestamp = localStorage.getItem(INDEX_TIMESTAMP_KEY);
-
-            if (indexedData) {
-                if (indexedData.length === baseMovies.length) {
-                    console.log('从 IndexedDB 缓存加载已索引的数据。');
-                    fullMovies = indexedData;
-                    ui.indexStatus.textContent = `上次构建于 ${indexTimestamp || '未知时间'}`;
-                } else {
-                    console.warn('缓存的索引与当前数据不匹配，需要重新构建。');
-                    await clearMovies();
-                    localStorage.removeItem(INDEX_TIMESTAMP_KEY);
-                    fullMovies = baseMovies;
-                    ui.indexStatus.textContent = '索引已过期，请重新构建。';
-                }
-            } else {
-                fullMovies = baseMovies;
-                ui.indexStatus.textContent = '尚未构建索引。';
-            }
-        } catch (e) {
-            console.error("加载 IndexedDB 数据时出错:", e);
-            fullMovies = baseMovies;
-            ui.indexStatus.textContent = '加载索引失败，请重新构建。';
-        }
-
-        // --- 核心修改：在将数据用于显示前，先对其进行随机排序 ---
+        // 随机排序
         shuffleArray(fullMovies);
-        // --- 修改结束 ---
 
         allMovies = [...fullMovies];
 
@@ -316,20 +279,17 @@ async function initialize() {
         setupEventListeners();
         movieScroller.loadNextBatch();
 
-        if (!indexedData) {
-            showToast('提示：请在右下角设置(⚙️)中构建元数据索引以启用完整功能。');
-        }
-
     } catch (error) {
         ui.loadingIndicator.textContent = `加载失败: ${error.message}`;
         console.error("加载数据时出错:", error);
     }
 }
 
-// --- 筛选逻辑 (无变化) ---
+// --- 筛选逻辑 (功能将受限，但代码保留) ---
 function applyMovieFilter({ type, value, description }) {
     clearMovieFilter(false);
     let filterFn;
+    // 注意：由于没有索引，movie.metadata 将为空，这些筛选将无法生效
     if (type === 'collection') { filterFn = movie => movie.metadata?.collection === value; }
     else if (type === 'person') { filterFn = movie => movie.metadata?.actors?.some(actor => actor.name === value); }
     if (filterFn) {
@@ -344,7 +304,8 @@ function clearMovieFilter(resetView = true) {
         movieScroller.dataArray = allMovies; movieScroller.reset(); movieScroller.loadNextBatch();
     }
 }
-// --- 搜索逻辑 (无变化) ---
+
+// --- 搜索逻辑 (功能将受限，但代码保留) ---
 function handleSearch() {
     const searchTerm = ui.searchBox.value.toLowerCase().trim();
     if (ui.filterStatus.style.display !== 'none') clearMovieFilter(false);
@@ -352,6 +313,7 @@ function handleSearch() {
     if (!searchTerm) {
         allMovies = [...fullMovies];
     } else {
+        // 注意：由于没有索引，只有标题搜索会有效
         allMovies = fullMovies.filter(m => {
             const title = m.title.toLowerCase();
             const originalTitle = m.metadata?.originaltitle?.toLowerCase() || '';
@@ -371,7 +333,7 @@ function handleSearch() {
     movieScroller.loadNextBatch();
 }
 
-// --- 事件监听 (无变化) ---
+// --- 事件监听 (已简化) ---
 function setupEventListeners() {
     ui.searchBox.addEventListener('input', handleSearch);
     ui.clearFilterBtn.addEventListener('click', () => clearMovieFilter(true));
@@ -440,53 +402,12 @@ function setupEventListeners() {
         }
     });
 
-    ui.buildIndexButton.addEventListener('click', buildMetadataIndex);
+    // 移除了 buildIndexButton 的事件监听
 }
 
-// --- 元数据索引构建函数 (无变化) ---
-async function buildMetadataIndex() {
-    ui.indexStatus.textContent = `正在处理 0 / ${fullMovies.length}...`;
-    ui.buildIndexButton.disabled = true;
+// --- 元数据索引构建函数 (已删除) ---
 
-    let processedCount = 0;
-    const moviesToIndex = JSON.parse(JSON.stringify(fullMovies));
-
-    for (const movie of moviesToIndex) {
-        if (movie.files?.[0]?.nfo) {
-            const nfoData = await parseNFO(movie.files[0].nfo);
-            if (nfoData) {
-                movie.metadata = { ...(movie.metadata || {}), ...nfoData };
-            }
-        }
-        processedCount++;
-        if (processedCount % 50 === 0 || processedCount === moviesToIndex.length) {
-            ui.indexStatus.textContent = `正在处理 ${processedCount} / ${moviesToIndex.length}...`;
-        }
-    }
-
-    try {
-        await saveMovies(moviesToIndex);
-        const timestamp = new Date().toLocaleString('zh-CN');
-        localStorage.setItem(INDEX_TIMESTAMP_KEY, timestamp);
-
-        fullMovies = moviesToIndex;
-        allMovies = [...fullMovies];
-
-        ui.indexStatus.textContent = `构建完成于 ${timestamp}`;
-        showToast('元数据索引构建完成！高级搜索和筛选功能已启用。', 5000);
-    } catch (e) {
-        console.error("无法保存索引到 IndexedDB:", e);
-        ui.indexStatus.textContent = '构建失败 (数据库错误)';
-        showToast('错误：无法保存索引到浏览器数据库。', 7000);
-    } finally {
-        ui.buildIndexButton.disabled = false;
-        movieScroller.dataArray = allMovies;
-        movieScroller.reset();
-        movieScroller.loadNextBatch();
-    }
-}
-
-// --- 数据查找辅助函数 (无变化) ---
+// --- 数据查找辅助函数 ---
 function getPersonImage(personName) {
     if (!personName) return placeholderActor;
     if (allPeople[personName]) return allPeople[personName];
@@ -494,7 +415,7 @@ function getPersonImage(personName) {
     return key ? allPeople[key] : placeholderActor;
 }
 
-// --- 播放器弹窗 (无变化) ---
+// --- 播放器弹窗 ---
 async function showPlayerModal(strmPath) {
     document.body.classList.add('body-no-scroll');
     ui.playerModal.style.display = 'flex';
@@ -505,21 +426,16 @@ async function showPlayerModal(strmPath) {
         const response = await fetch(strmPath);
         if (!response.ok) throw new Error('STRM file not found');
 
-        // --- CHANGE START: 修复双重编码问题的核心逻辑 ---
-        // 1. 从.strm文件获取原始路径，可能已部分编码
         const rawPath = (await response.text()).trim();
         let decodedPath;
 
-        // 2. 尝试解码，将其还原为最原始的字符串，以防双重编码
         try {
             decodedPath = decodeURIComponent(rawPath);
         } catch (e) {
-            // 如果解码失败（例如，路径中包含一个独立的 '%' 字符），则回退到原始路径
             console.warn("路径解码失败，将使用原始路径:", rawPath, e);
             decodedPath = rawPath;
         }
 
-        // 3. 对解码后的干净路径执行轮询替换逻辑
         let finalPath = decodedPath;
         if (Array.isArray(settings.baseUrl) && settings.baseUrl.length > 0) {
             if (baseUrlRoundRobinIndex >= settings.baseUrl.length) {
@@ -530,7 +446,6 @@ async function showPlayerModal(strmPath) {
             baseUrlRoundRobinIndex = (baseUrlRoundRobinIndex + 1) % settings.baseUrl.length;
         }
 
-        // 4. 基于干净的路径进行一次性正确编码
         const encodedPlayerUrl = encodeURI(finalPath);
         const encodedParameterUrl = encodeURIComponent(finalPath);
 
@@ -542,7 +457,6 @@ async function showPlayerModal(strmPath) {
             { name: 'IINA', scheme: `iina://weblink?url=${encodedParameterUrl}`, fallbackUrl: 'https://iina.io/' },
             { name: 'MPV', scheme: `mpv://${encodedPlayerUrl}`, fallbackUrl: 'https://mpv.io/' }
         ];
-        // --- CHANGE END ---
 
         const template = ui.templates.playerOption.content;
         const fragment = document.createDocumentFragment();
@@ -562,101 +476,27 @@ async function showPlayerModal(strmPath) {
     }
 }
 
-// --- 弹窗详情逻辑 (无变化) ---
+// --- 弹窗详情逻辑 ---
 async function showMovieDetails(movie) {
     if (!movie) return;
 
-    // 清空内容并准备填充
     const clearContent = (el) => { if(el) el.innerHTML = ''; };
     [
         ui.modalContent.poster, ui.modalContent.meta, ui.modalContent.directorsWriters,
         ui.modalContent.collectionLink, ui.modalContent.plot, ui.modalContent.cast,
-        ui.modalContent.studios, /* ui.modalContent.streamDetails, */ ui.modalContent.versions
+        ui.modalContent.studios, ui.modalContent.versions
     ].forEach(clearContent);
 
-    const { files: fileList = [], metadata = {} } = movie;
+    // movie.metadata 现在将始终为空，所以我们依赖 NFO fallback
+    const { files: fileList = [] } = movie;
     const mainFile = fileList[0] || {};
-    const { actors = [], genre: genres = [], studio: studiosList = [], plot, year, rating, runtime, collection, streams } = metadata;
 
     ui.modalContent.fanart.style.backgroundImage = mainFile.fanart ? `url('${encodeURI(mainFile.fanart)}')` : 'none';
     ui.modalContent.poster.innerHTML = `<img src="${encodeURI(mainFile.poster || placeholderImage)}" alt="海报">`;
-    ui.modalContent.title.textContent = metadata.title || movie.title;
+    ui.modalContent.title.textContent = movie.title;
+    ui.modalContent.plot.innerHTML = '<p class="error-text">正在加载剧情简介...</p>';
 
-    let metaHtml = '';
-    if (year) metaHtml += `<span>${year}</span>`;
-    if (rating > 0) metaHtml += `<span>⭐ ${Number(rating).toFixed(1)}</span>`;
-    if (runtime) metaHtml += `<span>🕒 ${runtime} 分钟</span>`;
-    if (genres?.length > 0) metaHtml += `<span>${genres.join(' / ')}</span>`;
-    ui.modalContent.meta.innerHTML = metaHtml;
-    ui.modalContent.plot.innerHTML = plot ? `<p>${plot.replace(/\n/g, '<br>')}</p>` : '<p class="error-text">正在加载剧情简介...</p>';
-
-    let dwHtml = '';
-    if (metadata.director?.length) dwHtml += `<p><strong>导演:</strong> ${metadata.director.join(', ')}</p>`;
-    if (metadata.writer?.length) dwHtml += `<p><strong>编剧:</strong> ${metadata.writer.join(', ')}</p>`;
-    ui.modalContent.directorsWriters.innerHTML = dwHtml;
-
-    if (collection && allCollections[collection]) {
-        const collectionData = allCollections[collection];
-        const template = ui.templates.collectionBanner.content;
-        const clone = template.cloneNode(true);
-        const banner = clone.querySelector('.collection-banner');
-        banner.dataset.collectionName = collection;
-        banner.querySelector('.collection-poster').src = encodeURI(collectionData.poster || placeholderImage);
-        banner.querySelector('.collection-poster').alt = collection;
-        banner.querySelector('p').textContent = collection.split('-tmdb-')[0];
-
-        banner.addEventListener('click', e => {
-            e.preventDefault();
-            hideAllModals();
-            applyMovieFilter({ type: 'collection', value: collection, description: `筛选合集: "${collection.split('-tmdb-')[0]}"` });
-        });
-        ui.modalContent.collectionLink.appendChild(clone);
-    }
-
-    if (actors?.length > 0) {
-        ui.modalContent.cast.innerHTML = '<h3>演员</h3><div class="cast-list"></div>';
-        const castListContainer = ui.modalContent.cast.querySelector('.cast-list');
-        const template = ui.templates.castMember.content;
-        const fragment = document.createDocumentFragment();
-        actors.slice(0, 20).forEach(actor => {
-            const clone = template.cloneNode(true);
-            const memberDiv = clone.querySelector('.cast-member');
-            const actorImage = actor.thumb || getPersonImage(actor.name);
-            memberDiv.querySelector('img').src = encodeURI(actorImage);
-            memberDiv.querySelector('img').alt = actor.name;
-            const nameDiv = memberDiv.querySelector('.name');
-            nameDiv.textContent = actor.name.split('-tmdb-')[0];
-            nameDiv.dataset.actorName = actor.name;
-            memberDiv.querySelector('.role').textContent = actor.role;
-
-            nameDiv.addEventListener('click', () => {
-                hideAllModals();
-                applyMovieFilter({ type: 'person', value: actor.name, description: `筛选人物: "${actor.name.split('-tmdb-')[0]}"` });
-            });
-            fragment.appendChild(clone);
-        });
-        castListContainer.appendChild(fragment);
-    }
-
-    if (studiosList?.length > 0) {
-        ui.modalContent.studios.innerHTML = '<h3>制片厂</h3><div class="studio-list"></div>';
-        const studioListContainer = ui.modalContent.studios.querySelector('.studio-list');
-        const template = ui.templates.studioItem.content;
-        const fragment = document.createDocumentFragment();
-        studiosList.forEach(studioName => {
-            const studioLogo = allStudios[studioName];
-            if (studioLogo) {
-                const clone = template.cloneNode(true);
-                const img = clone.querySelector('img');
-                img.src = encodeURI(studioLogo);
-                img.alt = studioName;
-                img.title = studioName;
-                fragment.appendChild(clone);
-            }
-        });
-        studioListContainer.appendChild(fragment);
-    }
-
+    // 版本列表
     if (fileList.length > 0) {
         ui.modalContent.versions.innerHTML = '<h3>可用版本</h3>';
         const template = ui.templates.versionItem.content;
@@ -678,48 +518,73 @@ async function showMovieDetails(movie) {
     document.body.classList.add('body-no-scroll');
     ui.modal.style.display = 'block';
 
-    /*
-    const renderStreamDetails = (streamData) => {
-        if (!streamData || (!streamData.video?.length && !streamData.audio?.length && !streamData.subtitle?.length)) return;
-
-        ui.modalContent.streamDetails.innerHTML = '<h3>音视频信息</h3><div class="stream-grid"></div>';
-        const gridContainer = ui.modalContent.streamDetails.querySelector('.stream-grid');
-        const template = ui.templates.streamInfoBox.content;
-        const fragment = document.createDocumentFragment();
-
-        streamData.video.forEach((s, i) => {
-            const clone = template.cloneNode(true);
-            clone.querySelector('h4').textContent = `视频 #${i + 1}`;
-            clone.querySelector('.details').innerHTML = `<p><strong>编码:</strong> ${s.codec || 'N/A'}</p><p><strong>分辨率:</strong> ${s.width}x${s.height}</p><p><strong>宽高比:</strong> ${s.aspect || 'N/A'}</p>`;
-            fragment.appendChild(clone);
-        });
-        streamData.audio.forEach((s, i) => {
-            const clone = template.cloneNode(true);
-            clone.querySelector('h4').textContent = `音频 #${i + 1}`;
-            clone.querySelector('.details').innerHTML = `<p><strong>编码:</strong> ${s.codec || 'N/A'}</p><p><strong>语言:</strong> ${s.language || 'N/A'}</p><p><strong>声道:</strong> ${s.channels || 'N/A'}</p>`;
-            fragment.appendChild(clone);
-        });
-        streamData.subtitle.forEach((s, i) => {
-            const clone = template.cloneNode(true);
-            clone.querySelector('h4').textContent = `字幕 #${i + 1}`;
-            clone.querySelector('.details').innerHTML = `<p><strong>语言:</strong> ${s.language || 'N/A'}</p>`;
-            fragment.appendChild(clone);
-        });
-        gridContainer.appendChild(fragment);
-    };
-    */
-
-    if (streams) {
-        // renderStreamDetails(streams);
-    } else if (mainFile.nfo) {
+    // 异步加载 NFO 数据来填充详细信息
+    if (mainFile.nfo) {
         const nfoData = await parseNFO(mainFile.nfo);
         if (nfoData) {
-            ui.modalContent.plot.innerHTML = nfoData.plot ? `<p>${nfoData.plot.replace(/\n/g, '<br>')}</p>` : '<p>暂无剧情简介。</p>';
-            let fallbackDwHtml = '';
-            if (nfoData.director.length) fallbackDwHtml += `<p><strong>导演:</strong> ${nfoData.director.join(', ')}</p>`;
-            if (nfoData.writer.length) fallbackDwHtml += `<p><strong>编剧:</strong> ${nfoData.writer.join(', ')}</p>`;
-            ui.modalContent.directorsWriters.innerHTML = fallbackDwHtml;
-            // renderStreamDetails(nfoData.streams);
+            const { actors = [], genre: genres = [], studio: studiosList = [], plot, year, rating, runtime, collection, director, writer } = nfoData;
+
+            let metaHtml = '';
+            if (year) metaHtml += `<span>${year}</span>`;
+            if (rating > 0) metaHtml += `<span>⭐ ${Number(rating).toFixed(1)}</span>`;
+            if (runtime) metaHtml += `<span>🕒 ${runtime} 分钟</span>`;
+            if (genres?.length > 0) metaHtml += `<span>${genres.join(' / ')}</span>`;
+            ui.modalContent.meta.innerHTML = metaHtml;
+
+            ui.modalContent.plot.innerHTML = plot ? `<p>${plot.replace(/\n/g, '<br>')}</p>` : '<p>暂无剧情简介。</p>';
+
+            let dwHtml = '';
+            if (director?.length) dwHtml += `<p><strong>导演:</strong> ${director.join(', ')}</p>`;
+            if (writer?.length) dwHtml += `<p><strong>编剧:</strong> ${writer.join(', ')}</p>`;
+            ui.modalContent.directorsWriters.innerHTML = dwHtml;
+
+            // 剩下的UI填充逻辑与之前类似，但使用从NFO解析的数据
+            if (collection && allCollections[collection]) {
+                const collectionData = allCollections[collection];
+                const template = ui.templates.collectionBanner.content;
+                const clone = template.cloneNode(true);
+                const banner = clone.querySelector('.collection-banner');
+                banner.addEventListener('click', (e) => { e.preventDefault(); /* 筛选功能已失效 */ });
+                banner.style.cursor = 'default'; // 移除点击手势
+                banner.querySelector('.collection-poster').src = encodeURI(collectionData.poster || placeholderImage);
+                banner.querySelector('p').textContent = collection.split('-tmdb-')[0];
+                ui.modalContent.collectionLink.appendChild(clone);
+            }
+
+            if (actors?.length > 0) {
+                ui.modalContent.cast.innerHTML = '<h3>演员</h3><div class="cast-list"></div>';
+                const castListContainer = ui.modalContent.cast.querySelector('.cast-list');
+                const template = ui.templates.castMember.content;
+                const fragment = document.createDocumentFragment();
+                actors.slice(0, 20).forEach(actor => {
+                    const clone = template.cloneNode(true);
+                    const memberDiv = clone.querySelector('.cast-member');
+                    memberDiv.querySelector('img').src = encodeURI(actor.thumb || getPersonImage(actor.name));
+                    memberDiv.querySelector('.name').textContent = actor.name.split('-tmdb-')[0];
+                    memberDiv.querySelector('.role').textContent = actor.role;
+                    fragment.appendChild(clone);
+                });
+                castListContainer.appendChild(fragment);
+            }
+
+            if (studiosList?.length > 0) {
+                ui.modalContent.studios.innerHTML = '<h3>制片厂</h3><div class="studio-list"></div>';
+                const studioListContainer = ui.modalContent.studios.querySelector('.studio-list');
+                const template = ui.templates.studioItem.content;
+                const fragment = document.createDocumentFragment();
+                studiosList.forEach(studioName => {
+                    const studioLogo = allStudios[studioName];
+                    if (studioLogo) {
+                        const clone = template.cloneNode(true);
+                        const img = clone.querySelector('img');
+                        img.src = encodeURI(studioLogo);
+                        img.alt = studioName;
+                        img.title = studioName;
+                        fragment.appendChild(clone);
+                    }
+                });
+                studioListContainer.appendChild(fragment);
+            }
         }
     }
 }
