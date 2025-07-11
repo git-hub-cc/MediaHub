@@ -375,6 +375,18 @@ function setupEventListeners() {
         if (button) { invokePlayer({ scheme: button.dataset.scheme, fallbackUrl: button.dataset.fallback, name: button.textContent }); }
     });
 
+    // Actor click listener in details modal
+    ui.modalContent.cast.addEventListener('click', e => {
+        const castMember = e.target.closest('.cast-member[data-actor-name]');
+        if (castMember) {
+            const actorName = castMember.dataset.actorName;
+            hideAllModals();
+            ui.searchBox.value = actorName;
+            handleSearch();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    });
+
     // Settings Panel Listeners
     ui.settingsButton.addEventListener('click', () => toggleSettingsPanel(true));
     ui.settingsCloseButton.addEventListener('click', () => toggleSettingsPanel(false));
@@ -559,8 +571,15 @@ async function showMovieDetails(movie) {
                 actors.slice(0, 20).forEach(actor => {
                     const clone = template.cloneNode(true);
                     const memberDiv = clone.querySelector('.cast-member');
+                    const cleanActorName = actor.name.split('-tmdb-')[0];
+
+                    // Make actor clickable to trigger a search
+                    memberDiv.dataset.actorName = cleanActorName;
+                    memberDiv.style.cursor = 'pointer';
+                    memberDiv.title = `搜索演员: ${cleanActorName}`;
+
                     memberDiv.querySelector('img').src = encodeURI(actor.thumb || getPersonImage(actor.name));
-                    memberDiv.querySelector('.name').textContent = actor.name.split('-tmdb-')[0];
+                    memberDiv.querySelector('.name').textContent = cleanActorName;
                     memberDiv.querySelector('.role').textContent = actor.role;
                     fragment.appendChild(clone);
                 });
