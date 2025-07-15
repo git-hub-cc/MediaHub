@@ -1,12 +1,13 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MediaHub</title>
-    <meta name="description" content="一个纯前端、无后端的静态媒体库浏览器，为您的 '小雅 AList' 等本地媒体资源提供美观、高效的 Netflix/Jellyfin 风格浏览体验。支持无限滚动、高级搜索、一键调用本地播放器，并可轻松部署。">
-    <meta name="keywords" content="静态媒体库, 媒体浏览器, 影视库, 电影墙, 海报墙, 小雅, 小雅alist, Jellyfin, Emby, PotPlayer, VLC, strm, nfo, 个人媒体服务器, serverless, Static Media Browser, Movie Library, Poster Wall">
-    <meta name="author" content="Static Media Library Project">
+  <meta name="description" content="一个纯前端、无后端的静态媒体库浏览器，为您的 '小雅 AList' 等本地媒体资源提供美观、高效的 Netflix/Jellyfin 风格浏览体验。支持无限滚动、高级搜索、一键调用本地播放器，并可轻松部署。">
+  <meta name="keywords" content="静态媒体库, 媒体浏览器, 影视库, 电影墙, 海报墙, 小雅, 小雅alist, Jellyfin, Emby, PotPlayer, VLC, strm, nfo, 个人媒体服务器, serverless, Static Media Browser, Movie Library, Poster Wall">
+  <meta name="author" content="Static Media Library Project">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -30,7 +31,29 @@
       <button id="add-base-url-button" class="button-add-item">+ 新增路径</button>
       <span id="save-status"></span>
     </div>
-    <!-- 元数据索引模块已被删除 -->
+
+    <!-- START 新增：搜索索引构建模块 -->
+    <div class="setting-item">
+      <label>增强搜索索引</label>
+      <p class="setting-description">
+        点击按钮解析所有影视的 NFO 元数据（演员、制片厂等），以启用更强大的搜索功能。
+        此操作可能需要一些时间，取决于您的媒体库大小。
+      </p>
+      <button id="build-search-index-button" class="button-add-item">构建搜索索引</button>
+      <span id="index-status"></span>
+    </div>
+    <!-- END 新增：搜索索引构建模块 -->
+
+    <!-- START 新增：关于 MediaHub 模块 -->
+    <div class="setting-item">
+      <label>关于 MediaHub</label>
+      <p class="setting-description">
+        MediaHub 是一个纯前端、无后端的静态媒体库浏览器项目。
+        您可以在 <a href="https://github.com/git-hub-cc/MediaHub" target="_blank" rel="noopener noreferrer">GitHub</a> 上找到本项目的源代码、提交问题或贡献力量。
+      </p>
+    </div>
+    <!-- END 新增：关于 MediaHub 模块 -->
+
     <div class="setting-item acknowledgments-section">
       <label>数据来源与致谢</label>
       <p class="setting-description">
@@ -78,12 +101,13 @@
       </div>
     </div>
     <div class="details-body">
-      <div id="modal-collection-link"></div>
+      <!-- <div id="modal-collection-link"></div> --> <!-- 移除：不再显示合集链接 -->
       <h3>剧情简介</h3>
       <div id="modal-plot"></div>
       <div id="modal-cast"></div>
       <div id="modal-studios"></div>
       <div id="modal-stream-details"></div>
+      <!-- This div will now dynamically hold either movie versions or TV show seasons/episodes -->
       <div id="modal-versions"></div>
     </div>
   </div>
@@ -122,17 +146,6 @@
   <!-- 播放器选项按钮模板 -->
   <template id="player-option-template">
     <button></button>
-  </template>
-
-  <!-- 合集横幅模板 -->
-  <template id="collection-banner-template">
-    <div class="collection-banner">
-      <img class="collection-poster" src="" alt="">
-      <div class="collection-info">
-        <span>所属合集</span>
-        <p></p>
-      </div>
-    </div>
   </template>
 
   <!-- 演员信息模板 -->

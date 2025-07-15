@@ -38,8 +38,8 @@ def summarize_all_studios(output_file='studios_summary.json'):
 
     # 定义所有可能的制片厂父目录
     # 根据图片，它们都在 'config/metadata' 下
-    metadata_base_dir = os.path.join(current_working_dir, 'config', 'metadata')
-    possible_folders = ['studios'] # 检查 'studios' 和 'Studio'
+    metadata_base_dir = os.path.join(current_working_dir)
+    possible_folders = ['Studio'] # 检查 'studios' 和 'Studio'
 
     all_studios_map = {}
 

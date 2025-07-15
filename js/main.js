@@ -8,7 +8,7 @@ import { BATCH_SIZE, placeholderImage, placeholderActor } from './constants.js';
 let allMovies = [], fullMovies = [];
 // 影视详情页仍需人物和合集信息
 let allPeople = {};
-let allCollections = {};
+// let allCollections = {}; // 移除：不再使用 collections_summary.json
 let allStudios = {};
 
 // --- 滚动器实例 ---
@@ -22,7 +22,20 @@ const settings = {
 };
 let baseUrlRoundRobinIndex = 0;
 const DEFAULT_URL_PREFIX = 'http://xiaoya.host:5678';
-// 移除了 INDEX_TIMESTAMP_KEY
+
+// START 新增：搜索索引状态 - 已移至此处，确保在 initialize 之前定义
+let isSearchIndexBuilt = false;
+const SEARCH_INDEX_BUILT_KEY = 'isSearchIndexBuilt'; // localStorage key
+const INITIAL_SEARCH_PLACEHOLDER = '搜索影视...';
+const ENHANCED_SEARCH_PLACEHOLDER = '搜索影视、演员、制片厂...';
+// END 新增：搜索索引状态
+
+
+// TV show specific state for modal
+let currentTvShowSeasonDataMap = new Map(); // Stores all parsed episode data, keyed by season name (e.g., "Season 1", "积木英语Alphablocks第三季")
+let currentTvShowActiveSeasonName = ''; // To remember which season tab is active
+let currentTvShowEpisodePage = 0; // Current page for the active season
+const EPISODES_PER_PAGE = 5; // Define episodes per page constant
 
 // --- DOM 元素获取 ---
 const ui = {
@@ -40,7 +53,7 @@ const ui = {
         title: document.getElementById('modal-title'),
         meta: document.getElementById('modal-meta'),
         directorsWriters: document.getElementById('modal-directors-writers'),
-        collectionLink: document.getElementById('modal-collection-link'),
+        // collectionLink: document.getElementById('modal-collection-link'), // 移除：不再显示合集链接
         plot: document.getElementById('modal-plot'),
         cast: document.getElementById('modal-cast'),
         studios: document.getElementById('modal-studios'),
@@ -60,12 +73,15 @@ const ui = {
     settingsBaseUrlList: document.getElementById('base-url-list'),
     addBaseUrlButton: document.getElementById('add-base-url-button'),
     saveStatus: document.getElementById('save-status'),
-    // 移除了 buildIndexButton 和 indexStatus 的引用
+    // START 新增：搜索索引UI元素
+    buildSearchIndexButton: document.getElementById('build-search-index-button'),
+    indexStatus: document.getElementById('index-status'),
+    // END 新增：搜索索引UI元素
     // 优化：缓存模板引用
     templates: {
         movieCard: document.getElementById('movie-card-template'),
         playerOption: document.getElementById('player-option-template'),
-        collectionBanner: document.getElementById('collection-banner-template'),
+        // collectionBanner: document.getElementById('collection-banner-template'), // 移除：不再使用合集横幅模板
         castMember: document.getElementById('cast-member-template'),
         studioItem: document.getElementById('studio-item-template'),
         versionItem: document.getElementById('version-item-template'),
@@ -86,14 +102,41 @@ function shuffleArray(array) {
     return array;
 }
 
+/**
+ * Cleans a file path for URL usage (replaces backslashes, encodes URI components).
+ * This function is crucial for paths originating from AList's JSON output.
+ * @param {string} path - The original file path.
+ * @returns {string} The URL-friendly path.
+ */
+function cleanPath(path) {
+    // Replace backslashes with forward slashes for URLs
+    // Then encode URI components, but keep forward slashes unencoded as they are path separators
+    // Also decode common characters like spaces, parentheses, etc., which AList's paths might already have encoded,
+    // to avoid double encoding.
+    // However, for fetching, we generally want it fully encoded. Let's stick to the simpler version from demo.html
+    // which just handles backslashes and standard encoding.
+    return encodeURIComponent(path.replace(/\\/g, '/')).replace(/%2F/g, '/');
+}
+
+
 // --- NFO 解析函数 (保留，用于详情页 fallback) ---
+// This function parses a generic NFO (movie or tvshow summary) and returns a structured object.
 async function parseNFO(nfoPath) {
     try {
-        const response = await fetch(nfoPath);
-        if (!response.ok) throw new Error(`NFO file not found: ${response.statusText}`);
+        const response = await fetch(cleanPath(nfoPath)); // Use cleanPath for fetching
+        if (!response.ok) {
+            console.warn(`NFO file not found: ${response.statusText} for ${nfoPath}`);
+            return null;
+        }
         const xmlText = await response.text();
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+        const errorNode = xmlDoc.querySelector("parsererror");
+        if (errorNode) {
+            console.warn("Error parsing XML:", errorNode.textContent, `from ${nfoPath}`);
+            return null;
+        }
+
         const get = (tag) => xmlDoc.querySelector(tag)?.textContent || '';
         const getAll = (tag, parent = xmlDoc) => Array.from(parent.querySelectorAll(tag)).map(el => el.textContent);
         const fileinfo = xmlDoc.querySelector('fileinfo streamdetails');
@@ -112,7 +155,7 @@ async function parseNFO(nfoPath) {
             title: get('title'), originaltitle: get('originaltitle'), plot: get('plot'), rating: get('rating'),
             year: get('year'), runtime: get('runtime'), director: getAll('director'), writer: getAll('writer'),
             studio: getAll('studio'), genre: getAll('genre'),
-            collection: get('set > name'),
+            collection: get('set > name'), // 仍保留，因为NFO中可能包含
             actors: Array.from(xmlDoc.querySelectorAll('actor')).map(actor => ({
                 name: actor.querySelector('name')?.textContent || '',
                 role: actor.querySelector('role')?.textContent || '',
@@ -121,7 +164,37 @@ async function parseNFO(nfoPath) {
             streams
         };
     } catch (error) {
-        console.error(`Error parsing NFO file ${nfoPath}:`, error);
+        console.warn(`Error parsing NFO file ${nfoPath}:`, error);
+        return null;
+    }
+}
+
+// --- New: Episode NFO parsing function ---
+// This function specifically parses an episode NFO and returns a simple object with episode details.
+async function parseEpisodeNFO(nfoPath) {
+    try {
+        const response = await fetch(cleanPath(nfoPath));
+        if (!response.ok) {
+            // console.warn(`Failed to fetch episode NFO: ${nfoPath} (Status: ${response.status})`); // Suppress in production
+            return null;
+        }
+        const xmlText = await response.text();
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+        const errorNode = xmlDoc.querySelector("parsererror");
+        if (errorNode) {
+            // console.warn("Error parsing episode XML:", errorNode.textContent); // Suppress in production
+            return null;
+        }
+
+        const title = xmlDoc.querySelector('title')?.textContent || '';
+        const episode = xmlDoc.querySelector('episode')?.textContent || '';
+        const plot = xmlDoc.querySelector('plot')?.textContent || '';
+        const outline = xmlDoc.querySelector('outline')?.textContent || ''; // Also retrieve outline
+
+        return { title, episode, plot, outline }; // Return all relevant fields
+    } catch (error) {
+        // console.warn(`Error fetching or parsing episode NFO ${nfoPath}:`, error); // Suppress in production
         return null;
     }
 }
@@ -159,6 +232,7 @@ function saveSettings() {
         localStorage.setItem('mediaLibrarySettings', JSON.stringify(settings));
     } catch (e) {
         console.error("无法保存设置到 localStorage:", e);
+        showToast("设置保存失败：浏览器存储空间不足或被禁用。", 5000);
     }
 }
 
@@ -191,6 +265,7 @@ function loadSettings() {
         const savedSettings = localStorage.getItem('mediaLibrarySettings');
         if (savedSettings) {
             Object.assign(settings, JSON.parse(savedSettings));
+            // Ensure baseUrl is an array, even if loaded as a single string from older format
             if (settings.baseUrl && !Array.isArray(settings.baseUrl)) {
                 settings.baseUrl = [settings.baseUrl];
             }
@@ -202,14 +277,37 @@ function loadSettings() {
     ui.settingsBaseUrlList.innerHTML = '';
 
     const urls = Array.isArray(settings.baseUrl) ? settings.baseUrl : [];
-    urls.forEach(url => {
-        ui.settingsBaseUrlList.appendChild(createBaseUrlInput(url));
-    });
+    // If no URLs are configured, add a default empty input field
+    if (urls.length === 0) {
+        ui.settingsBaseUrlList.appendChild(createBaseUrlInput());
+    } else {
+        urls.forEach(url => {
+            ui.settingsBaseUrlList.appendChild(createBaseUrlInput(url));
+        });
+    }
+}
+
+/**
+ * Loads the search index status from localStorage and updates UI.
+ */
+function loadSearchIndexStatus() {
+    isSearchIndexBuilt = localStorage.getItem(SEARCH_INDEX_BUILT_KEY) === 'true';
+    if (isSearchIndexBuilt) {
+        ui.buildSearchIndexButton.disabled = true;
+        ui.indexStatus.textContent = '索引已建立。';
+        ui.searchBox.placeholder = ENHANCED_SEARCH_PLACEHOLDER;
+    } else {
+        ui.buildSearchIndexButton.disabled = false;
+        ui.indexStatus.textContent = '索引未建立。';
+        ui.searchBox.placeholder = INITIAL_SEARCH_PLACEHOLDER;
+    }
 }
 
 function toggleSettingsPanel(show) {
     ui.settingsPanel.classList.toggle('open', show);
     ui.settingsOverlay.classList.toggle('show', show);
+    // Control body scroll when modal/panel is open
+    document.body.classList.toggle('body-no-scroll', show);
 }
 
 // --- 统一的模态框关闭函数 ---
@@ -224,53 +322,230 @@ function appendMovies(batch) {
     const fragment = document.createDocumentFragment();
     const template = ui.templates.movieCard.content;
 
-    batch.forEach((movie) => {
-        const mainFile = Array.isArray(movie.files) ? movie.files[0] : movie.files;
-        const posterPath = mainFile?.poster || placeholderImage;
+    batch.forEach((mediaItem) => {
+        // mediaItem is now either a movie or a tvshow object
+        const mainFile = Array.isArray(mediaItem.files) ? mediaItem.files[0] : mediaItem.files;
+        const posterPath = mainFile?.poster || placeholderImage; // 'poster' key is already full path after transformation
+
         const clone = template.cloneNode(true);
         const card = clone.querySelector('.card');
         const img = clone.querySelector('img');
         const titleOverlay = clone.querySelector('.title-overlay');
 
-        card.dataset.index = fullMovies.indexOf(movie);
-        img.src = encodeURI(posterPath);
-        img.alt = movie.title;
-        titleOverlay.textContent = movie.title;
+        card.dataset.index = fullMovies.indexOf(mediaItem);
+        // Use cleanPath for image source to ensure correct URL for local files
+        img.src = cleanPath(posterPath);
+        img.alt = mediaItem.title;
+        titleOverlay.textContent = mediaItem.title;
 
         fragment.appendChild(clone);
     });
     ui.movieGrid.appendChild(fragment);
 }
 
-// --- 数据获取与初始化 (已简化) ---
+// --- START 改进：搜索索引持久化和加载 ---
+async function buildSearchIndexAndPersist() {
+    if (isSearchIndexBuilt) {
+        showToast('搜索索引已建立，无需重复构建。', 3000);
+        return;
+    }
+
+    ui.buildSearchIndexButton.disabled = true;
+    ui.indexStatus.textContent = '正在解析元数据... (0%)';
+    showToast('正在构建搜索索引，请勿关闭页面。此过程可能需要几分钟。', 10000);
+
+    const BATCH_SIZE_NFO_PARSE = 20; // Process NFOs in smaller batches
+    let parsedCount = 0;
+    const totalMediaItems = fullMovies.length;
+    const searchMetadataCache = []; // Array to store simplified metadata for persistence
+
+    try {
+        for (let i = 0; i < totalMediaItems; i += BATCH_SIZE_NFO_PARSE) {
+            const batch = fullMovies.slice(i, i + BATCH_SIZE_NFO_PARSE);
+
+            const nfoPromises = batch.map(async (mediaItem, batchIndex) => {
+                const mainFile = Array.isArray(mediaItem.files) ? mediaItem.files[0] : mediaItem.files;
+                // Determine which NFO path to use for parsing (tvshow_nfo for TV shows, nfo for movies)
+                const nfoPath = mediaItem.type === 'tvshow' ? mainFile?.tvshow_nfo : mainFile?.nfo;
+
+                if (nfoPath) {
+                    const nfoData = await parseNFO(nfoPath);
+                    if (nfoData) {
+                        // Clean actor names for search (remove TMDB IDs)
+                        const actors = nfoData.actors?.map(a => a.name.split('-tmdb-')[0]) || [];
+                        const studio = nfoData.studio || [];
+                        // Attach to in-memory mediaItem for immediate use
+                        mediaItem.metadata = { actors, studio };
+                        // Also prepare for persistence
+                        searchMetadataCache[i + batchIndex] = {
+                            actors,
+                            studio
+                        };
+                    } else {
+                        mediaItem.metadata = { actors: [], studio: [] }; // Ensure metadata exists even if NFO fails
+                        searchMetadataCache[i + batchIndex] = { actors: [], studio: [] };
+                    }
+                } else {
+                    mediaItem.metadata = { actors: [], studio: [] }; // Ensure metadata exists if no NFO path
+                    searchMetadataCache[i + batchIndex] = { actors: [], studio: [] };
+                }
+            });
+
+            await Promise.allSettled(nfoPromises);
+
+            parsedCount += batch.length;
+            const progress = Math.min(Math.floor((parsedCount / totalMediaItems) * 100), 100);
+            ui.indexStatus.textContent = `正在解析元数据... (${progress}%)`;
+        }
+
+        // Persist the simplified search metadata
+        localStorage.setItem('searchMetadataCache', JSON.stringify(searchMetadataCache));
+        isSearchIndexBuilt = true;
+        localStorage.setItem(SEARCH_INDEX_BUILT_KEY, 'true');
+
+        ui.indexStatus.textContent = '索引已建立。';
+        ui.searchBox.placeholder = ENHANCED_SEARCH_PLACEHOLDER;
+        showToast('搜索索引构建完成！现在可以使用增强搜索功能。', 5000);
+        console.log("NFO parsing finished. Search index built successfully.");
+        handleSearch(); // Re-run search with enhanced capabilities
+    } catch (error) {
+        console.error("Error building search index:", error);
+        isSearchIndexBuilt = false; // Mark as failed
+        localStorage.removeItem(SEARCH_INDEX_BUILT_KEY); // Clear potentially incomplete flag
+        localStorage.removeItem('searchMetadataCache'); // Clear incomplete cache
+        ui.indexStatus.textContent = `索引构建失败: ${error.message}`;
+        ui.searchBox.placeholder = INITIAL_SEARCH_PLACEHOLDER;
+        showToast(`搜索索引构建失败: ${error.message}`, 10000);
+    } finally {
+        ui.buildSearchIndexButton.disabled = false;
+    }
+}
+
+/**
+ * Loads persisted search metadata and attaches it to `fullMovies`.
+ * Should be called after `fullMovies` is populated from `media_index.json`.
+ */
+function loadPersistedSearchMetadata() {
+    if (!isSearchIndexBuilt) return;
+
+    try {
+        const cachedMetadata = localStorage.getItem('searchMetadataCache');
+        if (cachedMetadata) {
+            const parsedCache = JSON.parse(cachedMetadata);
+            if (parsedCache.length === fullMovies.length) {
+                fullMovies.forEach((item, index) => {
+                    item.metadata = parsedCache[index];
+                });
+                console.log("Persisted search metadata loaded successfully.");
+            } else {
+                console.warn("Cached metadata length mismatch with current media list. Rebuilding index might be necessary.");
+                isSearchIndexBuilt = false;
+                localStorage.removeItem(SEARCH_INDEX_BUILT_KEY);
+                localStorage.removeItem('searchMetadataCache');
+                loadSearchIndexStatus(); // Update UI
+            }
+        } else {
+            // If flag is true but cache is missing, something is off. Reset.
+            console.warn("Search index flag is true but cache is missing. Resetting index status.");
+            isSearchIndexBuilt = false;
+            localStorage.removeItem(SEARCH_INDEX_BUILT_KEY);
+            localStorage.removeItem('searchMetadataCache');
+            loadSearchIndexStatus(); // Update UI
+        }
+    } catch (e) {
+        console.error("Error loading persisted search metadata:", e);
+        // On error, clear state to prompt user to rebuild
+        isSearchIndexBuilt = false;
+        localStorage.removeItem(SEARCH_INDEX_BUILT_KEY);
+        localStorage.removeItem('searchMetadataCache');
+        loadSearchIndexStatus(); // Update UI
+    }
+}
+// END 改进：搜索索引持久化和加载
+
+
+// --- 数据获取与初始化 ---
 async function initialize() {
-    ui.loadingIndicator.textContent = '正在初始化数据...';
+    ui.loadingIndicator.textContent = '正在加载基础数据...'; // 更具体的提示
     ui.loadingIndicator.style.display = 'block';
     try {
         loadSettings(); // 加载用户设置
-        const [movieRes, peopleRes, collectionRes, studioRes] = await Promise.all([
-            fetch('data/movie_summary.json'), fetch('data/people_summary.json'),
-            fetch('data/collections_summary.json'), fetch('data/studios_summary.json')
+        loadSearchIndexStatus(); // 调用已正确定义的函数
+
+        // Changed to fetch media_index.json
+        const [mediaIndexRes, peopleRes, studioRes] = await Promise.all([ // 移除 collectionRes
+            fetch('data/media_index.json'), fetch('data/people_summary.json'),
+            fetch('data/studios_summary.json')
         ]);
-        if (!movieRes.ok || !peopleRes.ok || !collectionRes.ok || !studioRes.ok) throw new Error('部分或全部数据文件加载失败');
+        if (!mediaIndexRes.ok || !peopleRes.ok || !studioRes.ok) throw new Error('部分或全部数据文件加载失败'); // 移除 collectionRes 检查
 
-        // 直接从 JSON 加载电影数据
-        const baseMovies = (await movieRes.json()).map(movie => {
-            if (movie.files && !Array.isArray(movie.files)) {
-                movie.files = [movie.files];
-            }
-            return movie;
+        const mediaIndexData = await mediaIndexRes.json();
+        let transformedMedia = [];
+
+        // Helper to safely get the first item from a potentially array-like field, or undefined
+        const getFirstItem = (item, prop) => {
+            const value = item[prop];
+            return Array.isArray(value) && value.length > 0 ? value[0] : value;
+        };
+
+        // Process Movies
+        const rawMovies = mediaIndexData.movies || [];
+        const transformedMovies = rawMovies.map(rawMovie => {
+            const title = rawMovie.path.split('\\').pop();
+            const files = (Array.isArray(rawMovie.files) ? rawMovie.files : [rawMovie.files]).map(file => ({
+                // Construct full relative paths for files
+                poster: rawMovie.path + '\\' + getFirstItem(file, 'poster_image'), // Ensure single poster
+                nfo: rawMovie.path + '\\' + getFirstItem(file, 'nfo'), // Ensure single nfo
+                strm: rawMovie.path + '\\' + getFirstItem(file, 'strm'), // Ensure single strm
+                fanart: getFirstItem(file, 'fanart_image') ? rawMovie.path + '\\' + getFirstItem(file, 'fanart_image') : undefined // Ensure single fanart if present
+            }));
+            return { title, type: 'movie', path: rawMovie.path, files, metadata: null }; // Added metadata placeholder
         });
+        transformedMedia.push(...transformedMovies);
 
-        fullMovies = baseMovies;
+        // Process TV Shows
+        const rawTvShows = mediaIndexData.tv_shows || [];
+        const transformedTvShows = rawTvShows.map(rawTvShow => {
+            const title = rawTvShow.path.split('\\').pop();
+            const mainFile = rawTvShow.files[0] || {}; // Assuming the first object in files array holds primary info
+
+            return {
+                title: title,
+                type: 'tvshow', // Important flag to distinguish
+                path: rawTvShow.path, // Keep the base path
+                files: [{ // Simplified files for card display and basic modal info
+                    // Apply getFirstItem for single-valued fields
+                    poster: getFirstItem(mainFile, 'poster_image') ? rawTvShow.path + '\\' + getFirstItem(mainFile, 'poster_image') : undefined,
+                    fanart: getFirstItem(mainFile, 'fanart_image') ? rawTvShow.path + '\\' + getFirstItem(mainFile, 'fanart_image') : undefined,
+                    tvshow_nfo: getFirstItem(mainFile, 'tvshow_nfo') ? rawTvShow.path + '\\' + getFirstItem(mainFile, 'tvshow_nfo') : undefined, // Main show NFO
+                    // Pass along the complex nfo/strm structures for episodes as they are (arrays of objects)
+                    nfo: mainFile.nfo,
+                    strm: mainFile.strm
+                }],
+                rawTvShowData: rawTvShow, // Store the full raw data for detailed modal display
+                metadata: null // Added metadata placeholder
+            };
+        });
+        transformedMedia.push(...transformedTvShows);
+
+
+        fullMovies = transformedMedia; // fullMovies now contains both movies and tv shows
+
+        // START 新增：如果搜索索引已构建，则加载持久化的元数据
+        if (isSearchIndexBuilt) {
+            ui.loadingIndicator.textContent = '正在应用现有搜索索引...';
+            loadPersistedSearchMetadata();
+        }
+        // END 新增：如果搜索索引已构建...
+
 
         // 随机排序
-        shuffleArray(fullMovies);
+        shuffleArray(fullMovies); // Still shuffles all media types
 
-        allMovies = [...fullMovies];
+        allMovies = [...fullMovies]; // allMovies now contains both movies and tv shows
 
         allPeople = await peopleRes.json();
-        allCollections = await collectionRes.json();
+        // allCollections = await collectionRes.json(); // 移除：不再加载 collections_summary.json
         allStudios = await studioRes.json();
 
         movieScroller = new InfiniteScroller({ container: ui.movieGrid, dataArray: allMovies, renderBatchFunc: appendMovies, batchSize: BATCH_SIZE, loadingIndicator: ui.loadingIndicator });
@@ -286,12 +561,15 @@ async function initialize() {
 }
 
 // --- 筛选逻辑 (功能将受限，但代码保留) ---
+// Note: Filtering by metadata (collection, person) will only work reliably if that metadata is pre-indexed.
+// With current NFO parsing on demand, this will only effectively filter by title.
 function applyMovieFilter({ type, value, description }) {
     clearMovieFilter(false);
     let filterFn;
-    // 注意：由于没有索引，movie.metadata 将为空，这些筛选将无法生效
-    if (type === 'collection') { filterFn = movie => movie.metadata?.collection === value; }
-    else if (type === 'person') { filterFn = movie => movie.metadata?.actors?.some(actor => actor.name === value); }
+    // Due to dynamic NFO parsing, these filters are not effective without pre-indexed metadata
+    // For full functionality, `mediaItem.metadata` would need to be populated during initialization
+    if (type === 'collection') { filterFn = mediaItem => mediaItem.metadata?.collection === value; }
+    else if (type === 'person') { filterFn = mediaItem => mediaItem.metadata?.actors?.some(actor => actor.name === value); }
     if (filterFn) {
         allMovies = fullMovies.filter(filterFn);
         movieScroller.dataArray = allMovies; movieScroller.reset(); movieScroller.loadNextBatch();
@@ -305,7 +583,7 @@ function clearMovieFilter(resetView = true) {
     }
 }
 
-// --- 搜索逻辑 (功能将受限，但代码保留) ---
+// --- 搜索逻辑 (已增强) ---
 function handleSearch() {
     const searchTerm = ui.searchBox.value.toLowerCase().trim();
     if (ui.filterStatus.style.display !== 'none') clearMovieFilter(false);
@@ -313,19 +591,32 @@ function handleSearch() {
     if (!searchTerm) {
         allMovies = [...fullMovies];
     } else {
-        // 注意：由于没有索引，只有标题搜索会有效
+        // Enhanced Search: Title, Actors, Studios
         allMovies = fullMovies.filter(m => {
+            // 1. Check Title
             const title = m.title.toLowerCase();
-            const originalTitle = m.metadata?.originaltitle?.toLowerCase() || '';
-            const plot = m.metadata?.plot?.toLowerCase() || '';
-            const hasActor = m.metadata?.actors?.some(a => a.name.toLowerCase().split('-tmdb-')[0].includes(searchTerm)) || false;
-            const hasDirector = m.metadata?.director?.some(d => d.toLowerCase().split('-tmdb-')[0].includes(searchTerm)) || false;
-            const hasWriter = m.metadata?.writer?.some(w => w.toLowerCase().split('-tmdb-')[0].includes(searchTerm)) || false;
+            if (title.includes(searchTerm)) return true;
 
-            return title.includes(searchTerm) ||
-                originalTitle.includes(searchTerm) ||
-                plot.includes(searchTerm) ||
-                hasActor || hasDirector || hasWriter;
+            // 2. Check Metadata (Actors and Studios), which is now pre-loaded or persisted
+            if (isSearchIndexBuilt && m.metadata) { // Only perform enhanced search if index is built
+                // Check Actors
+                const actorsMatch = m.metadata.actors.some(actorName =>
+                    actorName.toLowerCase().includes(searchTerm) // actorName is already clean string
+                );
+                if (actorsMatch) return true;
+
+                // Check Studios
+                const studiosMatch = m.metadata.studio.some(studioName =>
+                    studioName.toLowerCase().includes(searchTerm)
+                );
+                if (studiosMatch) return true;
+
+                // Optional: Check Directors/Writers if desired and added to persisted metadata
+                // const directorsMatch = m.metadata.director.some(name => name.toLowerCase().includes(searchTerm));
+                // if (directorsMatch) return true;
+            }
+
+            return false;
         });
     }
     movieScroller.dataArray = allMovies;
@@ -414,7 +705,9 @@ function setupEventListeners() {
         }
     });
 
-    // 移除了 buildIndexButton 的事件监听
+    // START 新增：构建搜索索引按钮的事件监听
+    ui.buildSearchIndexButton.addEventListener('click', buildSearchIndexAndPersist);
+    // END 新增：构建搜索索引按钮的事件监听
 }
 
 // --- 元数据索引构建函数 (已删除) ---
@@ -424,7 +717,9 @@ function getPersonImage(personName) {
     if (!personName) return placeholderActor;
     if (allPeople[personName]) return allPeople[personName];
     const key = Object.keys(allPeople).find(k => k.startsWith(personName + '-tmdb-'));
-    return key ? allPeople[key] : placeholderActor;
+    // MODIFICATION START: `people_summary.json` paths should be used directly
+    return key ? allPeople[key] : placeholderActor; // `allPeople[key]` is already a direct TMDB URL
+    // MODIFICATION END
 }
 
 // --- 播放器弹窗 ---
@@ -434,8 +729,17 @@ async function showPlayerModal(strmPath) {
     ui.playbackPathInput.value = '正在读取...';
     ui.playerOptions.innerHTML = '';
 
+    // If strmPath is not provided or is an invalid type for direct playback (e.g., for TV show summary)
+    if (!strmPath || typeof strmPath !== 'string' || strmPath === 'null') { // Added 'null' check
+        ui.playbackPathInput.value = '此媒体类型无法直接播放或未提供有效播放路径。';
+        ui.copyPathButton.disabled = true; // Disable copy button
+        ui.playerOptions.innerHTML = '<p class="error-text">当前剧集或版本没有可用的播放路径。</p>'; // Improved message
+        return; // Exit early
+    }
+    ui.copyPathButton.disabled = false; // Enable copy button for valid strmPath
+
     try {
-        const response = await fetch(strmPath);
+        const response = await fetch(cleanPath(strmPath)); // Use cleanPath for fetching STRM
         if (!response.ok) throw new Error('STRM file not found');
 
         const rawPath = (await response.text()).trim();
@@ -450,16 +754,36 @@ async function showPlayerModal(strmPath) {
 
         let finalPath = decodedPath;
         if (Array.isArray(settings.baseUrl) && settings.baseUrl.length > 0) {
-            if (baseUrlRoundRobinIndex >= settings.baseUrl.length) {
-                baseUrlRoundRobinIndex = 0;
+            // Find the best base URL to replace based on known prefixes
+            let replaced = false;
+            for (let i = 0; i < settings.baseUrl.length; i++) {
+                const currentBaseUrlIndex = (baseUrlRoundRobinIndex + i) % settings.baseUrl.length;
+                const currentBaseUrl = settings.baseUrl[currentBaseUrlIndex];
+
+                // If the decodedPath starts with the DEFAULT_URL_PREFIX, replace it
+                if (decodedPath.startsWith(DEFAULT_URL_PREFIX)) {
+                    finalPath = decodedPath.replace(DEFAULT_URL_PREFIX, currentBaseUrl);
+                    baseUrlRoundRobinIndex = (currentBaseUrlIndex + 1) % settings.baseUrl.length; // Update for next time
+                    replaced = true;
+                    break; // Found and replaced, exit loop
+                }
             }
-            const currentBaseUrl = settings.baseUrl[baseUrlRoundRobinIndex];
-            finalPath = finalPath.replace(DEFAULT_URL_PREFIX, currentBaseUrl);
-            baseUrlRoundRobinIndex = (baseUrlRoundRobinIndex + 1) % settings.baseUrl.length;
+            // If DEFAULT_URL_PREFIX was not found, but custom URLs are configured, try to append
+            // This case might be more complex if original STRM paths are relative or arbitrary.
+            // For now, if no replacement happened, stick with the original decodedPath.
+            // A more robust solution might involve parsing the actual URL in the STMR file content.
+            if (!replaced && !decodedPath.startsWith('http')) { // Assuming relative path if no http
+                // This is a basic assumption. AList paths might not always be relative.
+                // For safety, if it's not starting with http/https, we might prepend the first custom base URL.
+                // However, this could lead to incorrect paths if the STRM contains a full but different domain.
+                // Keeping it simple as per original demo logic: if it's not the default, just pass it through.
+                // The current iteration of STRM parsing (just reading content as URL) assumes absolute URLs.
+                // So, no changes here for appending.
+            }
         }
 
         const encodedPlayerUrl = encodeURI(finalPath);
-        const encodedParameterUrl = encodeURIComponent(finalPath);
+        const encodedParameterUrl = encodeURIComponent(finalPath); // For players that encode parameters separately
 
         ui.playbackPathInput.value = encodedPlayerUrl;
 
@@ -484,127 +808,328 @@ async function showPlayerModal(strmPath) {
 
     } catch(error) {
         ui.playbackPathInput.value = '读取STRM文件失败';
+        ui.playerOptions.innerHTML = '<p class="error-text">无法加载STRM播放路径。</p>';
         console.error('Failed to load STRM file:', error);
     }
 }
 
+// Helper function to render episodes for the currently active season and page
+const renderEpisodesForActiveSeason = async (containerElement) => { // Made async
+    containerElement.innerHTML = ''; // Clear previous episodes
+
+    // Ensure episodes are awaited if they are still a Promise from initial parsing
+    const episodesPromise = currentTvShowSeasonDataMap.get(currentTvShowActiveSeasonName);
+    const episodes = await Promise.resolve(episodesPromise); // Resolve the promise if it's still one
+
+    if (!episodes || episodes.length === 0) {
+        containerElement.innerHTML = '<p class="error-text">本季暂无剧集信息。</p>';
+        return;
+    }
+
+    const totalEpisodes = episodes.length;
+    const totalPages = Math.ceil(totalEpisodes / EPISODES_PER_PAGE);
+
+    const start = currentTvShowEpisodePage * EPISODES_PER_PAGE;
+    const end = Math.min(start + EPISODES_PER_PAGE, totalEpisodes);
+    const episodesToDisplay = episodes.slice(start, end);
+
+    const episodeUl = document.createElement('ul');
+    episodeUl.classList.add('episode-list');
+
+    episodesToDisplay.forEach(episode => {
+        const episodeLi = document.createElement('li');
+        episodeLi.className = 'episode-item';
+        episodeLi.innerHTML = `
+            <div class="episode-info">
+                <strong>E${episode.episode !== 'N/A' ? episode.episode : '?'}: ${episode.title}</strong>
+                <p class="episode-plot">${episode.plot || episode.outline || '暂无简介。'}</p> 
+            </div>
+            <button class="play-episode-button" data-strm="${episode.strm}">▶ 播放</button>
+        `;
+        episodeUl.appendChild(episodeLi);
+    });
+    containerElement.appendChild(episodeUl);
+
+    // Add pagination controls
+    const paginationDiv = document.createElement('div');
+    paginationDiv.className = 'pagination-controls';
+    paginationDiv.innerHTML = `
+        <button id="prev-episode-page" ${currentTvShowEpisodePage === 0 ? 'disabled' : ''}>上一页</button>
+        <span>第 ${currentTvShowEpisodePage + 1} / ${totalPages} 页</span>
+        <button id="next-episode-page" ${currentTvShowEpisodePage >= totalPages - 1 ? 'disabled' : ''}>下一页</button>
+    `;
+    containerElement.appendChild(paginationDiv);
+
+    paginationDiv.querySelector('#prev-episode-page').addEventListener('click', () => {
+        if (currentTvShowEpisodePage > 0) {
+            currentTvShowEpisodePage--;
+            renderEpisodesForActiveSeason(containerElement);
+        }
+    });
+    paginationDiv.querySelector('#next-episode-page').addEventListener('click', () => {
+        if (currentTvShowEpisodePage < totalPages - 1) {
+            currentTvShowEpisodePage++;
+            renderEpisodesForActiveSeason(containerElement);
+        }
+    });
+
+    // Add click listener for episode play buttons
+    episodeUl.querySelectorAll('.play-episode-button').forEach(button => {
+        button.addEventListener('click', (e) => {
+            const strmPath = e.target.dataset.strm;
+            // Handle null strmPath gracefully
+            if (strmPath === 'null' || !strmPath) {
+                showToast('当前剧集没有可用的播放路径。', 3000);
+                console.warn('Attempted to play episode with no valid strm path:', episode);
+            } else {
+                showPlayerModal(strmPath);
+            }
+        });
+    });
+};
+
+
 // --- 弹窗详情逻辑 ---
-async function showMovieDetails(movie) {
-    if (!movie) return;
+async function showMovieDetails(mediaItem) {
+    if (!mediaItem) return;
 
     const clearContent = (el) => { if(el) el.innerHTML = ''; };
     [
         ui.modalContent.poster, ui.modalContent.meta, ui.modalContent.directorsWriters,
-        ui.modalContent.collectionLink, ui.modalContent.plot, ui.modalContent.cast,
+        // ui.modalContent.collectionLink, // 移除：不再清空合集链接
+        ui.modalContent.plot, ui.modalContent.cast,
         ui.modalContent.studios, ui.modalContent.versions
     ].forEach(clearContent);
 
-    // movie.metadata 现在将始终为空，所以我们依赖 NFO fallback
-    const { files: fileList = [] } = movie;
-    const mainFile = fileList[0] || {};
+    const mainFile = Array.isArray(mediaItem.files) ? mediaItem.files[0] : mediaItem.files;
 
-    ui.modalContent.fanart.style.backgroundImage = mainFile.fanart ? `url('${encodeURI(mainFile.fanart)}')` : 'none';
-    ui.modalContent.poster.innerHTML = `<img src="${encodeURI(mainFile.poster || placeholderImage)}" alt="海报">`;
-    ui.modalContent.title.textContent = movie.title;
-    ui.modalContent.plot.innerHTML = '<p class="error-text">正在加载剧情简介...</p>';
+    ui.modalContent.fanart.style.backgroundImage = mainFile?.fanart ? `url('${cleanPath(mainFile.fanart)}')` : 'none';
+    ui.modalContent.poster.innerHTML = `<img src="${cleanPath(mainFile?.poster || placeholderImage)}" alt="海报">`;
+    ui.modalContent.title.textContent = mediaItem.title;
+    ui.modalContent.plot.innerHTML = '<p class="error-text">正在加载详情...</p>';
 
-    // 版本列表
-    if (fileList.length > 0) {
-        ui.modalContent.versions.innerHTML = '<h3>可用版本</h3>';
-        const template = ui.templates.versionItem.content;
-        const fragment = document.createDocumentFragment();
-        fileList.forEach((file) => {
-            if (file.strm) {
-                const versionLabel = file.strm.split('/').pop().replace(/\.strm$/i, '');
-                const clone = template.cloneNode(true);
-                const item = clone.querySelector('.version-item');
-                item.textContent = versionLabel;
-                item.dataset.strmPath = file.strm;
-                item.addEventListener('click', () => showPlayerModal(file.strm));
-                fragment.appendChild(clone);
+    // Conditional handling for Movies vs. TV Shows
+    if (mediaItem.type === 'tvshow') {
+        ui.modalContent.versions.innerHTML = '<h3>剧集列表</h3>'; // Rephrase
+        const tvShowPath = mediaItem.path;
+        // mainFile now directly contains nfo and strm structures thanks to the previous transformation
+        const seasonNfoGroups = mainFile.nfo; // This is the array of objects (e.g., [{"Season 1": [...]}, {"Season 2": [...]}] )
+        const seasonStrmGroups = mainFile.strm; // This is the array of objects
+
+        const seasonTabsContainer = document.createElement('div');
+        seasonTabsContainer.className = 'season-tabs';
+        ui.modalContent.versions.appendChild(seasonTabsContainer);
+
+        const episodeListContainer = document.createElement('div');
+        episodeListContainer.className = 'episode-list-container';
+        ui.modalContent.versions.appendChild(episodeListContainer);
+
+        // Clear previous TV show specific state
+        currentTvShowSeasonDataMap.clear();
+        currentTvShowActiveSeasonName = '';
+        currentTvShowEpisodePage = 0;
+
+        if (seasonNfoGroups && Array.isArray(seasonNfoGroups) && seasonNfoGroups.length > 0 &&
+            seasonStrmGroups && Array.isArray(seasonStrmGroups) && seasonStrmGroups.length === seasonNfoGroups.length) {
+
+            const seasonNamesOrder = []; // To maintain the order of seasons for tab creation
+            seasonNfoGroups.forEach((seasonNfoObject, seasonIndex) => {
+                for (const seasonName in seasonNfoObject) { // Loop through the single key in each season object
+                    seasonNamesOrder.push(seasonName);
+                    const episodeNfoPaths = seasonNfoObject[seasonName]; // Get array of NFO paths for this season
+                    // Correspondingly get STRM paths for this season
+                    const seasonStrmObjectForThisSeason = seasonStrmGroups[seasonIndex];
+                    const episodeStrmPaths = seasonStrmObjectForThisSeason ? seasonStrmObjectForThisSeason[seasonName] : null;
+
+
+                    if (!episodeStrmPaths || !Array.isArray(episodeStrmPaths) || episodeNfoPaths.length !== episodeStrmPaths.length) {
+                        console.warn(`Mismatch or missing STRM files for season "${seasonName}". Falling back or marking as not playable.`);
+                        // For now, we will proceed, but episode.strm might be undefined if episodeStrmPaths is short
+                    }
+
+                    // --- Collect promises for this season's episodes ---
+                    const episodesForThisSeasonPromises = episodeNfoPaths.map(async (nfoRelativePath, epIndex) => {
+                        const fullEpisodeNfoPath = tvShowPath + '\\' + nfoRelativePath;
+                        const fullEpisodeStrmPath = (episodeStrmPaths && episodeStrmPaths[epIndex]) ? (tvShowPath + '\\' + episodeStrmPaths[epIndex]) : null;
+
+                        const episodeNfoData = await parseEpisodeNFO(fullEpisodeNfoPath);
+                        return {
+                            title: episodeNfoData?.title || nfoRelativePath.split('\\').pop().replace(/\.(nfo|strm)$/i, ''), // Clean name from file if no NFO title
+                            episode: episodeNfoData?.episode || (epIndex + 1).toString(), // Fallback to index if no episode number in NFO
+                            plot: episodeNfoData?.plot || episodeNfoData?.outline || '暂无简介。',
+                            strm: fullEpisodeStrmPath // Can be null if no corresponding strm
+                        };
+                    });
+
+                    // Store the promise result directly in the map
+                    currentTvShowSeasonDataMap.set(seasonName, Promise.all(episodesForThisSeasonPromises)); // Store the promise
+                }
+            });
+
+            // After initiating all parsing, create tabs and activate the first one
+            let firstSeasonButtonCreated = false;
+            for (const seasonName of seasonNamesOrder) {
+                const seasonButton = document.createElement('button');
+                // Clean up season name for display: remove bracketed content like file size
+                const cleanSeasonDisplayName = seasonName.replace(/【.*?】/g, '').trim();
+                seasonButton.textContent = cleanSeasonDisplayName;
+                seasonButton.className = 'season-tab-button';
+                seasonTabsContainer.appendChild(seasonButton);
+
+                const activateSeason = async () => { // Make activateSeason async
+                    currentTvShowActiveSeasonName = seasonName;
+                    currentTvShowEpisodePage = 0; // Reset page on tab change
+                    document.querySelectorAll('.season-tab-button').forEach(btn => btn.classList.remove('active'));
+                    seasonButton.classList.add('active');
+
+                    // Await the episodes for this season before rendering
+                    const episodesToRender = await Promise.resolve(currentTvShowSeasonDataMap.get(seasonName));
+                    currentTvShowSeasonDataMap.set(seasonName, episodesToRender); // Store the resolved data
+                    renderEpisodesForActiveSeason(episodeListContainer);
+                };
+
+                seasonButton.addEventListener('click', activateSeason);
+
+                if (!firstSeasonButtonCreated) {
+                    activateSeason(); // Activate the first season by default
+                    firstSeasonButtonCreated = true;
+                }
             }
-        });
-        ui.modalContent.versions.appendChild(fragment);
+
+            // If no seasons were found or parsed after setup
+            if (!firstSeasonButtonCreated) {
+                episodeListContainer.innerHTML = '<p class="error-text">未能加载剧集列表或没有可用的季。</p>';
+            }
+
+        } else {
+            episodeListContainer.innerHTML = '<p class="error-text">未能加载剧集列表或文件结构不匹配。</p>';
+        }
+
+    } else { // It's a movie
+        // Versions list for movies
+        if (mediaItem.files.length > 0) {
+            ui.modalContent.versions.innerHTML = '<h3>可用版本</h3>';
+            const template = ui.templates.versionItem.content;
+            const fragment = document.createDocumentFragment();
+            mediaItem.files.forEach((file) => { // Use movie.files directly for movies
+                if (file.strm) {
+                    const versionLabel = file.strm.split('/').pop().replace(/\.strm$/i, '');
+                    const clone = template.cloneNode(true);
+                    const item = clone.querySelector('.version-item');
+                    item.textContent = versionLabel;
+                    item.dataset.strmPath = file.strm;
+                    item.addEventListener('click', () => showPlayerModal(file.strm));
+                    fragment.appendChild(clone);
+                }
+            });
+            ui.modalContent.versions.appendChild(fragment);
+        }
     }
 
     document.body.classList.add('body-no-scroll');
     ui.modal.style.display = 'block';
 
-    // 异步加载 NFO 数据来填充详细信息
-    if (mainFile.nfo) {
-        const nfoData = await parseNFO(mainFile.nfo);
-        if (nfoData) {
-            const { actors = [], genre: genres = [], studio: studiosList = [], plot, year, rating, runtime, collection, director, writer } = nfoData;
+    // Load NFO data for details. We always fetch the NFO for display purposes if not already fully cached.
+    // The `mediaItem.metadata` used for search might be a simplified version.
+    const nfoToParse = mainFile.tvshow_nfo || mainFile.nfo;
+    let nfoData = null;
+    if (nfoToParse) {
+        nfoData = await parseNFO(nfoToParse);
+    }
 
-            let metaHtml = '';
-            if (year) metaHtml += `<span>${year}</span>`;
-            if (rating > 0) metaHtml += `<span>⭐ ${Number(rating).toFixed(1)}</span>`;
-            if (runtime) metaHtml += `<span>🕒 ${runtime} 分钟</span>`;
-            if (genres?.length > 0) metaHtml += `<span>${genres.join(' / ')}</span>`;
-            ui.modalContent.meta.innerHTML = metaHtml;
+    if (nfoData) {
+        const { actors = [], genre: genres = [], studio: studiosList = [], plot, year, rating, runtime, collection, director, writer } = nfoData;
 
-            ui.modalContent.plot.innerHTML = plot ? `<p>${plot.replace(/\n/g, '<br>')}</p>` : '<p>暂无剧情简介。</p>';
+        let metaHtml = '';
+        if (year) metaHtml += `<span>${year}</span>`;
+        if (rating > 0) metaHtml += `<span>⭐ ${Number(rating).toFixed(1)}</span>`;
+        if (runtime) metaHtml += `<span>🕒 ${runtime} 分钟</span>`;
+        if (genres?.length > 0) metaHtml += `<span>${genres.join(' / ')}</span>`;
+        ui.modalContent.meta.innerHTML = metaHtml;
 
-            let dwHtml = '';
-            if (director?.length) dwHtml += `<p><strong>导演:</strong> ${director.join(', ')}</p>`;
-            if (writer?.length) dwHtml += `<p><strong>编剧:</strong> ${writer.join(', ')}</p>`;
-            ui.modalContent.directorsWriters.innerHTML = dwHtml;
+        ui.modalContent.plot.innerHTML = plot ? `<p>${plot.replace(/\n/g, '<br>')}</p>` : '<p>暂无剧情简介。</p>';
 
-            // 剩下的UI填充逻辑与之前类似，但使用从NFO解析的数据
-            if (collection && allCollections[collection]) {
-                const collectionData = allCollections[collection];
-                const template = ui.templates.collectionBanner.content;
+        let dwHtml = '';
+        if (director?.length) dwHtml += `<p><strong>导演:</strong> ${director.join(', ')}</p>`;
+        if (writer?.length) dwHtml += `<p><strong>编剧:</strong> ${writer.join(', ')}</p>`;
+        ui.modalContent.directorsWriters.innerHTML = dwHtml;
+
+        // 移除：合集链接部分，因为 collections_summary.json 已被移除，且不再显示合集横幅
+        // ... (collection code removed) ...
+
+
+        if (actors?.length > 0) {
+            ui.modalContent.cast.innerHTML = '<h3>演员</h3><div class="cast-list"></div>';
+            const castListContainer = ui.modalContent.cast.querySelector('.cast-list');
+            const template = ui.templates.castMember.content;
+            const fragment = document.createDocumentFragment();
+            actors.slice(0, 20).forEach(actor => {
                 const clone = template.cloneNode(true);
-                const banner = clone.querySelector('.collection-banner');
-                banner.addEventListener('click', (e) => { e.preventDefault(); /* 筛选功能已失效 */ });
-                banner.style.cursor = 'default'; // 移除点击手势
-                banner.querySelector('.collection-poster').src = encodeURI(collectionData.poster || placeholderImage);
-                banner.querySelector('p').textContent = collection.split('-tmdb-')[0];
-                ui.modalContent.collectionLink.appendChild(clone);
-            }
+                const memberDiv = clone.querySelector('.cast-member');
+                const cleanActorName = actor.name.split('-tmdb-')[0];
 
-            if (actors?.length > 0) {
-                ui.modalContent.cast.innerHTML = '<h3>演员</h3><div class="cast-list"></div>';
-                const castListContainer = ui.modalContent.cast.querySelector('.cast-list');
-                const template = ui.templates.castMember.content;
-                const fragment = document.createDocumentFragment();
-                actors.slice(0, 20).forEach(actor => {
-                    const clone = template.cloneNode(true);
-                    const memberDiv = clone.querySelector('.cast-member');
-                    const cleanActorName = actor.name.split('-tmdb-')[0];
+                // Make actor clickable to trigger a search
+                memberDiv.dataset.actorName = cleanActorName;
+                memberDiv.style.cursor = 'pointer';
+                memberDiv.title = `搜索演员: ${cleanActorName}`;
 
-                    // Make actor clickable to trigger a search
-                    memberDiv.dataset.actorName = cleanActorName;
-                    memberDiv.style.cursor = 'pointer';
-                    memberDiv.title = `搜索演员: ${cleanActorName}`;
-
-                    memberDiv.querySelector('img').src = encodeURI(actor.thumb || getPersonImage(actor.name));
-                    memberDiv.querySelector('.name').textContent = cleanActorName;
-                    memberDiv.querySelector('.role').textContent = actor.role;
-                    fragment.appendChild(clone);
-                });
-                castListContainer.appendChild(fragment);
-            }
-
-            if (studiosList?.length > 0) {
-                ui.modalContent.studios.innerHTML = '<h3>制片厂</h3><div class="studio-list"></div>';
-                const studioListContainer = ui.modalContent.studios.querySelector('.studio-list');
-                const template = ui.templates.studioItem.content;
-                const fragment = document.createDocumentFragment();
-                studiosList.forEach(studioName => {
-                    const studioLogo = allStudios[studioName];
-                    if (studioLogo) {
-                        const clone = template.cloneNode(true);
-                        const img = clone.querySelector('img');
-                        img.src = encodeURI(studioLogo);
-                        img.alt = studioName;
-                        img.title = studioName;
-                        fragment.appendChild(clone);
+                // MODIFICATION START: Handle actor image source conditionally
+                let finalActorThumbSrc;
+                if (actor.thumb) {
+                    // If actor.thumb exists, check if it's already a full URL (http/https/data URI)
+                    if (actor.thumb.startsWith('http://') || actor.thumb.startsWith('https://') || actor.thumb.startsWith('data:')) {
+                        finalActorThumbSrc = actor.thumb; // It's a direct URL, use it as is
+                    } else {
+                        // Assume it's a local path from NFO that needs cleaning
+                        finalActorThumbSrc = cleanPath(actor.thumb); // Apply cleanPath to ensure proper URL encoding and slashes
                     }
-                });
-                studioListContainer.appendChild(fragment);
-            }
+                } else {
+                    // If actor.thumb is empty, fall back to `people_summary.json`
+                    // `getPersonImage()` now returns a direct TMDB URL, so no `cleanPath` is applied here
+                    finalActorThumbSrc = getPersonImage(actor.name);
+                }
+                memberDiv.querySelector('img').src = finalActorThumbSrc || placeholderActor;
+                // MODIFICATION END
+
+                memberDiv.querySelector('.name').textContent = cleanActorName;
+                memberDiv.querySelector('.role').textContent = actor.role;
+                fragment.appendChild(clone);
+            });
+            castListContainer.appendChild(fragment);
         }
+
+        if (studiosList?.length > 0) {
+            ui.modalContent.studios.innerHTML = '<h3>制片厂</h3><div class="studio-list"></div>';
+            const studioListContainer = ui.modalContent.studios.querySelector('.studio-list');
+            const template = ui.templates.studioItem.content;
+            const fragment = document.createDocumentFragment();
+            studiosList.forEach(studioName => {
+                const studioLogo = allStudios[studioName];
+                if (studioLogo) {
+                    const clone = template.cloneNode(true);
+                    const img = clone.querySelector('img');
+                    // 修复：studioLogo本身就是完整的URL，不需要cleanPath
+                    img.src = studioLogo; // <-- 这一行被修改
+                    img.alt = studioName;
+                    img.title = studioName;
+
+                    // START MODIFICATION: Add click listener for studio images
+                    img.style.cursor = 'pointer'; // Indicate it's clickable
+                    img.addEventListener('click', () => {
+                        hideAllModals();
+                        ui.searchBox.value = studioName; // Set search box value to studio name
+                        handleSearch(); // Trigger search
+                        window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll to top
+                    });
+                    // END MODIFICATION
+
+                    fragment.appendChild(clone);
+                }
+            });
+            studioListContainer.appendChild(fragment);
+        }
+    } else {
+        ui.modalContent.plot.innerHTML = '<p class="error-text">未能加载 NFO 元数据。</p>';
     }
 }
 
