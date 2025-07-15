@@ -2,7 +2,7 @@
 
 import { InfiniteScroller } from './virtual-scroll.js';
 import { BATCH_SIZE, placeholderImage, placeholderActor } from './constants.js';
-// 移除了 indexedDBHelper 的导入
+import { getFromIndexedDB, saveToIndexedDB, STORE_NAMES } from './indexedDBHelper.js'; // 导入 IndexedDB 辅助函数和常量
 
 // --- 全局数据存储 ---
 let allMovies = [], fullMovies = [];
@@ -327,6 +327,14 @@ function appendMovies(batch) {
         const mainFile = Array.isArray(mediaItem.files) ? mediaItem.files[0] : mediaItem.files;
         const posterPath = mainFile?.poster || placeholderImage; // 'poster' key is already full path after transformation
 
+        // START MODIFICATION: 检查如果封面是占位图，则跳过渲染
+        // 原始代码已移除此处的条件跳过，确保所有搜索到的项目都能被渲染
+        // if (posterPath === placeholderImage) {
+        //     // console.log(`Skipping media item "${mediaItem.title}" due to missing poster.`); // 可选：用于调试
+        //     return; // 跳过当前媒体项，不将其渲染到页面上
+        // }
+        // END MODIFICATION
+
         const clone = template.cloneNode(true);
         const card = clone.querySelector('.card');
         const img = clone.querySelector('img');
@@ -466,20 +474,50 @@ function loadPersistedSearchMetadata() {
 
 // --- 数据获取与初始化 ---
 async function initialize() {
-    ui.loadingIndicator.textContent = '正在加载基础数据...'; // 更具体的提示
+    ui.loadingIndicator.textContent = '正在加载基础数据，首次加载5分钟预计，数据量在100MB...'; // 更具体的提示
     ui.loadingIndicator.style.display = 'block';
     try {
         loadSettings(); // 加载用户设置
         loadSearchIndexStatus(); // 调用已正确定义的函数
 
-        // Changed to fetch media_index.json
-        const [mediaIndexRes, peopleRes, studioRes] = await Promise.all([ // 移除 collectionRes
-            fetch('data/media_index.json'), fetch('data/people_summary.json'),
-            fetch('data/studios_summary.json')
-        ]);
-        if (!mediaIndexRes.ok || !peopleRes.ok || !studioRes.ok) throw new Error('部分或全部数据文件加载失败'); // 移除 collectionRes 检查
+        // Function to try IndexedDB first, then fetch from network and cache
+        const getDataWithCache = async (storeName, filePath) => {
+            try {
+                const cachedData = await getFromIndexedDB(storeName);
+                if (cachedData) {
+                    console.log(`[Cache] 从 IndexedDB 加载 ${storeName}`);
+                    // showToast(`从本地缓存加载 ${storeName}.`, 1000); // Too verbose, keep console log
+                    return cachedData;
+                }
+            } catch (dbError) {
+                console.warn(`[Cache Error] IndexedDB 读取 ${storeName} 失败，将从网络获取:`, dbError);
+                showToast(`本地缓存读取 ${storeName} 失败，将从网络重新加载。`, 3000);
+            }
 
-        const mediaIndexData = await mediaIndexRes.json();
+            ui.loadingIndicator.textContent = `正在从网络加载 ${storeName}...`; // Update loading status
+            const response = await fetch(filePath);
+            if (!response.ok) {
+                throw new Error(`无法加载 ${filePath}: ${response.statusText}`);
+            }
+            const data = await response.json();
+            try {
+                await saveToIndexedDB(storeName, data);
+                console.log(`[Cache] 已将 ${storeName} 保存到 IndexedDB`);
+                showToast(`已成功缓存 ${storeName}。`, 2000);
+            } catch (dbError) {
+                console.error(`[Cache Error] 保存 ${storeName} 到 IndexedDB 失败:`, dbError);
+                showToast(`无法保存 ${storeName} 到本地缓存。`, 3000);
+            }
+            return data;
+        };
+
+        // Changed to fetch media_index.json using the new caching mechanism
+        const [mediaIndexData, peopleData, studioData] = await Promise.all([
+            getDataWithCache(STORE_NAMES.MEDIA_INDEX, 'data/media_index.json'),
+            getDataWithCache(STORE_NAMES.PEOPLE_SUMMARY, 'data/people_summary.json'),
+            getDataWithCache(STORE_NAMES.STUDIOS_SUMMARY, 'data/studios_summary.json')
+        ]);
+
         let transformedMedia = [];
 
         // Helper to safely get the first item from a potentially array-like field, or undefined
@@ -544,9 +582,8 @@ async function initialize() {
 
         allMovies = [...fullMovies]; // allMovies now contains both movies and tv shows
 
-        allPeople = await peopleRes.json();
-        // allCollections = await collectionRes.json(); // 移除：不再加载 collections_summary.json
-        allStudios = await studioRes.json();
+        allPeople = peopleData; // 使用从缓存/网络获取的数据
+        allStudios = studioData; // 使用从缓存/网络获取的数据
 
         movieScroller = new InfiniteScroller({ container: ui.movieGrid, dataArray: allMovies, renderBatchFunc: appendMovies, batchSize: BATCH_SIZE, loadingIndicator: ui.loadingIndicator });
 
@@ -557,6 +594,7 @@ async function initialize() {
     } catch (error) {
         ui.loadingIndicator.textContent = `加载失败: ${error.message}`;
         console.error("加载数据时出错:", error);
+        showToast(`应用启动失败: ${error.message}`, 10000);
     }
 }
 
@@ -772,6 +810,8 @@ async function showPlayerModal(strmPath) {
             // This case might be more complex if original STRM paths are relative or arbitrary.
             // For now, if no replacement happened, stick with the original decodedPath.
             // A more robust solution might involve parsing the actual URL in the STMR file content.
+            // The current iteration of STRM parsing (just reading content as URL) assumes absolute URLs.
+            // So, no changes here for appending.
             if (!replaced && !decodedPath.startsWith('http')) { // Assuming relative path if no http
                 // This is a basic assumption. AList paths might not always be relative.
                 // For safety, if it's not starting with http/https, we might prepend the first custom base URL.
@@ -842,7 +882,7 @@ const renderEpisodesForActiveSeason = async (containerElement) => { // Made asyn
         episodeLi.innerHTML = `
             <div class="episode-info">
                 <strong>E${episode.episode !== 'N/A' ? episode.episode : '?'}: ${episode.title}</strong>
-                <p class="episode-plot">${episode.plot || episode.outline || '暂无简介。'}</p> 
+                <p class="episode-plot">${episode.plot || episode.outline || '暂无简介。'}</p>
             </div>
             <button class="play-episode-button" data-strm="${episode.strm}">▶ 播放</button>
         `;
