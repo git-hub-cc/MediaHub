@@ -7,7 +7,7 @@ import threading
 
 # --- Configuration ---
 # IMPORTANT: Replace "YOUR_TMDB_API_KEY" with your actual TMDb API key
-TMDB_API_KEY = "在此处粘贴你的API密钥"
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
 TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/original" # Use 'original' for highest quality
 DOWNLOAD_BASE_DIR = "download" # Base directory where downloaded posters will be saved
 
