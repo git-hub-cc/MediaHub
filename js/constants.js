@@ -14,3 +14,7 @@ export const placeholderImage = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0c
  * 当演员头像缺失时使用的占位符图片 (SVG Base64)。
  */
 export const placeholderActor = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PGNpcmNsZSBjeD0iNTAiIGN5PSI1MCIgcj0iNTAiIGZpbGw9IiMzMzMiLz48cGF0aCBkPSJNNTAsNTBDNTAsMzUgNjUsMjAgNjUsMjBTNTEsMzUgNTEsNTBDNTEsNjUgMzUsODAgMzUsODBTNzUsNjUgNzUsNTBaTTUwLDYwQTM4LDM4IDAgMCAwIDUwLDYwWiIgZmlsbD0iIzY2NiIvPjwvc3ZnPg==';
+
+// 新增文件路径常量
+export const MOVIE_INDEX_FILE = 'data/movies_index.json';
+export const TVSHOW_INDEX_FILE = 'data/tvshows_index.json';

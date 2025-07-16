@@ -345,43 +345,33 @@ main {
 .studio-list {
     align-items: center;
 }
+.studio-item { /* MODIFIED: Added styles for the container */
+    display: flex; /* Make it a flex container to center the image */
+    justify-content: center;
+    align-items: center;
+    padding: 0.5rem; /* Add padding around the logo */
+    background-color: var(--color-surface); /* Background for visibility */
+    border: 1px solid var(--color-border); /* A subtle border */
+    border-radius: var(--border-radius); /* Rounded corners */
+    transition: all var(--transition-speed) ease; /* Smooth transition for hover effects */
+    min-width: 80px; /* Ensure a minimum width for the container */
+    height: 80px; /* Consistent height for the container */
+    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+    flex-shrink: 0; /* Prevent items from shrinking below their content size */
+}
 .studio-item img {
     max-height: 50px;
+    max-width: 100%; /* Ensure image fits within its container */
     width: auto;
-    transition: filter var(--transition-speed) ease;
+    object-fit: contain; /* Scale content to fit within the container, maintaining aspect ratio */
+    /* transition: filter var(--transition-speed) ease; */ /* Removed as the container handles the main transition */
 }
-.studio-item img:hover {
+.studio-item:hover { /* MODIFIED: Added gradient, shadow, and transform on hover */
+    background: linear-gradient(to right, var(--color-primary), #a0060e); /* Gradient background */
+    box-shadow: 0 4px 15px rgba(229, 9, 20, 0.4); /* Shadow using primary color */
+    transform: translateY(-3px); /* Subtle lift effect */
+    border-color: var(--color-primary); /* Change border color */
 }
-
-/* 移除：合集横幅相关样式
-.collection-banner {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    background: var(--color-surface);
-    padding: 1rem;
-    border-radius: var(--border-radius);
-    cursor: pointer;
-    transition: background-color var(--transition-speed) ease;
-}
-.collection-banner:hover {
-    background-color: #2a2a2a;
-}
-.collection-poster {
-    width: 50px;
-    height: 75px;
-    object-fit: cover;
-    border-radius: 4px;
-}
-.collection-info span {
-    font-size: 0.9rem;
-    color: var(--color-text-secondary);
-}
-.collection-info p {
-    margin: 0;
-    font-weight: bold;
-}
-*/
 
 #modal-versions {
     display: flex;
@@ -453,10 +443,6 @@ main {
 }
 .episode-item:hover {
     background-color: #2a2a2a;
-}
-.episode-info {
-    flex-grow: 1;
-    margin-right: 1rem;
 }
 .episode-info strong {
     display: block;
@@ -696,7 +682,7 @@ main {
 }
 .delete-url-button:hover { background-color: var(--color-primary); color: white; }
 
-.button-add-item, #build-search-index-button { /* 增加了 #build-search-index-button */
+.button-add-item, #build-search-index-button, #load-tvshows-button { /* 增加了 #build-search-index-button, #load-tvshows-button */
     background-color: transparent;
     border: 1px solid var(--color-border);
     color: var(--color-text-primary);
@@ -705,11 +691,11 @@ main {
     cursor: pointer;
     transition: all var(--transition-speed) ease;
 }
-.button-add-item:hover, #build-search-index-button:hover { /* 增加了 #build-search-index-button */
+.button-add-item:hover, #build-search-index-button:hover, #load-tvshows-button:hover { /* 增加了 #build-search-index-button, #load-tvshows-button */
     background-color: var(--color-surface);
     border-color: #555;
 }
-#build-search-index-button:disabled { /* 针对新按钮的禁用样式 */
+#build-search-index-button:disabled, #load-tvshows-button:disabled { /* 针对新按钮的禁用样式 */
     opacity: 0.5;
     cursor: not-allowed;
     background-color: #333;
@@ -717,7 +703,7 @@ main {
 }
 
 
-#save-status, #index-status {
+#save-status, #index-status, #tvshows-status { /* 增加了 #tvshows-status */
     display: inline-block;
     margin-left: 1rem;
     font-size: 0.9rem;

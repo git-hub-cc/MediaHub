@@ -31,6 +31,18 @@
       <span id="save-status"></span>
     </div>
 
+    <!-- START 新增：加载电视剧模块 -->
+    <div class="setting-item">
+      <label>加载电视剧数据</label>
+      <p class="setting-description">
+        默认仅加载电影数据，点击按钮可额外加载电视剧数据，合并到您的媒体库中。
+        此操作可能需要一些时间，取决于您的电视剧数据量。
+      </p>
+      <button id="load-tvshows-button" class="button-add-item">加载电视剧数据</button>
+      <span id="tvshows-status"></span>
+    </div>
+    <!-- END 新增：加载电视剧模块 -->
+
     <!-- START 新增：搜索索引构建模块 -->
     <div class="setting-item">
       <label>增强搜索索引</label>
@@ -71,7 +83,8 @@
 <header>
   <h1><a href="#">MediaHub</a></h1>
   <nav>
-    <input type="search" id="search-box" placeholder="搜索影视...">
+    <!-- MODIFIED: Initial placeholder text -->
+    <input type="search" id="search-box" placeholder="搜索电影...">
   </nav>
 </header>
 
@@ -100,7 +113,6 @@
       </div>
     </div>
     <div class="details-body">
-      <!-- <div id="modal-collection-link"></div> --> <!-- 移除：不再显示合集链接 -->
       <h3>剧情简介</h3>
       <div id="modal-plot"></div>
       <div id="modal-cast"></div>
