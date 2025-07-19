@@ -333,19 +333,54 @@ function loadTvShowsLoadedStatus() {
     updateSearchPlaceholder(); // Update placeholder based on current status
 }
 
+// MODIFIED: Consolidated closing function for all overlays (modals and settings panel)
+function hideAllOverlays(fromPopState = false) {
+    let closedAny = false;
 
-function toggleSettingsPanel(show) {
-    ui.settingsPanel.classList.toggle('open', show);
-    ui.settingsOverlay.classList.toggle('show', show);
-    // Control body scroll when modal/panel is open
-    document.body.classList.toggle('body-no-scroll', show);
+    // Check and close details modal
+    if (ui.modal.style.display !== 'none') {
+        ui.modal.style.display = 'none';
+        closedAny = true;
+        if (!fromPopState && history.state && history.state.modal === 'details') {
+            history.back(); // Pop the state if not triggered by popstate itself
+        }
+    }
+
+    // Check and close player modal
+    if (ui.playerModal.style.display !== 'none') {
+        ui.playerModal.style.display = 'none';
+        closedAny = true;
+        if (!fromPopState && history.state && history.state.modal === 'player') {
+            history.back(); // Pop the state if not triggered by popstate itself
+        }
+    }
+
+    // Check and close settings panel
+    if (ui.settingsPanel.classList.contains('open')) {
+        ui.settingsPanel.classList.remove('open');
+        ui.settingsOverlay.classList.remove('show');
+        closedAny = true;
+        if (!fromPopState && history.state && history.state.modal === 'settings') {
+            history.back(); // Pop the state if not triggered by popstate itself
+        }
+    }
+
+    // Only remove body-no-scroll if we actually closed something
+    if (closedAny) {
+        document.body.classList.remove('body-no-scroll');
+    }
 }
 
-// --- 统一的模态框关闭函数 ---
-function hideAllModals() {
-    ui.modal.style.display = 'none';
-    ui.playerModal.style.display = 'none';
-    document.body.classList.remove('body-no-scroll');
+
+function toggleSettingsPanel(show) {
+    if (show) {
+        ui.settingsPanel.classList.add('open');
+        ui.settingsOverlay.classList.add('show');
+        document.body.classList.add('body-no-scroll');
+        history.pushState({ modal: 'settings' }, '', ''); // Push state when opening settings
+    } else {
+        hideAllOverlays(); // Use the unified hide function for closing
+    }
 }
 
 // --- 渲染函数 ---
@@ -783,7 +818,8 @@ function setupEventListeners() {
     ui.clearFilterBtn.addEventListener('click', () => clearMovieFilter(true));
 
     window.addEventListener('scroll', () => {
-        if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 500) {
+        // MODIFIED: Prevent loading more if any overlay is open
+        if (!ui.settingsPanel.classList.contains('open') && ui.modal.style.display === 'none' && ui.playerModal.style.display === 'none' && window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 500) {
             movieScroller?.loadNextBatch();
         }
     }, { passive: true });
@@ -799,14 +835,13 @@ function setupEventListeners() {
     });
 
     // Modal closing listeners
-    ui.closeModalBtn.addEventListener('click', hideAllModals);
-    ui.modal.addEventListener('click', (e) => { if (e.target === ui.modal) hideAllModals(); });
-    ui.closePlayerModalBtn.addEventListener('click', hideAllModals);
-    ui.playerModal.addEventListener('click', (e) => { if (e.target === ui.playerModal) hideAllModals(); });
+    ui.closeModalBtn.addEventListener('click', () => hideAllOverlays());
+    ui.modal.addEventListener('click', (e) => { if (e.target === ui.modal) hideAllOverlays(); });
+    ui.closePlayerModalBtn.addEventListener('click', () => hideAllOverlays());
+    ui.playerModal.addEventListener('click', (e) => { if (e.target === ui.playerModal) hideAllOverlays(); });
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            hideAllModals();
-            toggleSettingsPanel(false);
+            hideAllOverlays(); // Now handles all overlays
         }
     });
 
@@ -825,7 +860,7 @@ function setupEventListeners() {
         const castMember = e.target.closest('.cast-member[data-actor-name]');
         if (castMember) {
             const actorName = castMember.dataset.actorName;
-            hideAllModals();
+            hideAllOverlays(); // MODIFIED: Use hideAllOverlays
             ui.searchBox.value = actorName;
             handleSearch();
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -834,8 +869,8 @@ function setupEventListeners() {
 
     // Settings Panel Listeners
     ui.settingsButton.addEventListener('click', () => toggleSettingsPanel(true));
-    ui.settingsCloseButton.addEventListener('click', () => toggleSettingsPanel(false));
-    ui.settingsOverlay.addEventListener('click', () => toggleSettingsPanel(false));
+    ui.settingsCloseButton.addEventListener('click', () => hideAllOverlays()); // MODIFIED: Call hideAllOverlays directly
+    ui.settingsOverlay.addEventListener('click', () => hideAllOverlays()); // MODIFIED: Call hideAllOverlays directly
 
     ui.addBaseUrlButton.addEventListener('click', () => {
         const newItem = createBaseUrlInput();
@@ -868,11 +903,25 @@ function setupEventListeners() {
         ui.loadTvShowsButton.addEventListener('click', loadTvShowsData);
     }
     // END 新增：加载电视剧数据按钮的事件监听
+
+    // START NEW: Popstate listener for browser back/forward buttons
+    window.addEventListener('popstate', (event) => {
+        // Check if any modal/overlay is currently visible
+        const isAnyOverlayOpen = ui.modal.style.display !== 'none' ||
+            ui.playerModal.style.display !== 'none' ||
+            ui.settingsPanel.classList.contains('open');
+
+        if (isAnyOverlayOpen) {
+            // If an overlay is open and popstate fires (e.g., user clicked back),
+            // close it via our unified function, signaling it's from popstate
+            hideAllOverlays(true);
+        }
+        // If no overlay is open, let the browser handle the history navigation normally.
+    });
+    // END NEW: Popstate listener
 }
 
-// --- 元数据索引构建函数 (已删除) ---
-
-// --- 数据查找辅助函数 ---
+// --- 元数据查找辅助函数 ---
 function getPersonImage(personName) {
     if (!personName) return placeholderActor;
     if (allPeople[personName]) return allPeople[personName];
@@ -884,6 +933,7 @@ function getPersonImage(personName) {
 async function showPlayerModal(strmPath) {
     document.body.classList.add('body-no-scroll');
     ui.playerModal.style.display = 'flex';
+    history.pushState({ modal: 'player' }, '', ''); // PUSH history state when opening
     ui.playbackPathInput.value = '正在读取...';
     ui.playerOptions.innerHTML = '';
 
@@ -1171,8 +1221,9 @@ async function showMovieDetails(mediaItem) {
         }
     }
 
-    document.body.classList.add('body-no-scroll');
+    document.body.classList.add('body-no-scroll'); // Keep this here for immediate visual effect
     ui.modal.style.display = 'block';
+    history.pushState({ modal: 'details', mediaItemIndex: fullMovies.indexOf(mediaItem) }, '', ''); // PUSH history state when opening
 
     // Load NFO data for details. We always fetch the NFO for display purposes if not already fully cached.
     // The `mediaItem.metadata` used for search might be a simplified version.
@@ -1249,7 +1300,7 @@ async function showMovieDetails(mediaItem) {
 
                     img.style.cursor = 'pointer';
                     img.addEventListener('click', () => {
-                        hideAllModals();
+                        hideAllOverlays(); // MODIFIED: Use hideAllOverlays
                         ui.searchBox.value = studioName;
                         handleSearch();
                         window.scrollTo({ top: 0, behavior: 'smooth' });
