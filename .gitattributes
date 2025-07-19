@@ -1,3 +1,2 @@
-data/media_index.json filter=lfs diff=lfs merge=lfs -text
-data/version2/tvshows_index.json filter=lfs diff=lfs merge=lfs -text
-# git lfs track "path"
+data/tvshows_index filter=lfs diff=lfs merge=lfs -text
+*.json filter=lfs diff=lfs merge=lfs -text
