@@ -1,4 +1,4 @@
-// ui.js (已应用修复)
+// ui.js (Refined to Mimic Modal Logic)
 
 import * as data from './data.js';
 
@@ -55,6 +55,7 @@ const EPISODES_PER_PAGE = 5;
 let currentTvShowSeasonDataMap = new Map();
 let currentTvShowActiveSeasonName = '';
 let currentTvShowEpisodePage = 0;
+let wasSearchActive = false; // 新增：用于跟踪搜索状态，以管理历史记录
 
 // --- 区域: UI 渲染函数 ---
 
@@ -161,7 +162,11 @@ function invokePlayer({ scheme, fallbackUrl, name }) {
     window.location.href = scheme;
 }
 
-/** 隐藏所有模态框和遮罩层 */
+/**
+ * 隐藏所有模态框和遮罩层。
+ * @param {boolean} fromPopState - 是否由浏览器的 popstate 事件触发。
+ * @returns {boolean} 如果有任何模态框被关闭，则返回 true。
+ */
 function hideAllOverlays(fromPopState = false) {
     let closedAny = false;
     const overlays = [
@@ -189,6 +194,7 @@ function hideAllOverlays(fromPopState = false) {
     if (closedAny) {
         document.body.classList.remove('body-no-scroll');
     }
+    return closedAny;
 }
 
 /** 切换设置面板的显示/隐藏 */
@@ -393,22 +399,17 @@ function renderNfoDetails(nfoData, mediaPath) {
             const cleanName = actor.name.split('-tmdb-')[0];
             memberDiv.dataset.actorName = cleanName;
 
-            // --- FIX START: 完整、健壮的演员头像处理逻辑 ---
-            let finalActorThumbSrc = data.placeholderActor; // 默认使用占位符
+            let finalActorThumbSrc = data.placeholderActor;
 
             if (actor.thumb) {
-                // 情况1: NFO中的<thumb>是完整的URL (http, https, data)
                 if (actor.thumb.startsWith('http') || actor.thumb.startsWith('data:')) {
                     finalActorThumbSrc = actor.thumb;
                 } else {
-                    // 情况2: <thumb>是相对路径或文件名，需要和媒体路径拼接
                     finalActorThumbSrc = data.cleanPath(`${mediaPath}\\${actor.thumb}`);
                 }
             } else {
-                // 情况3: NFO中没有<thumb>，启用备用方案，从 data.allPeople 中查找
                 finalActorThumbSrc = data.getPersonImage(actor.name);
             }
-            // --- FIX END ---
 
             memberDiv.querySelector('img').src = finalActorThumbSrc;
             memberDiv.querySelector('.name').textContent = cleanName;
@@ -453,9 +454,28 @@ export function updateSearchPlaceholder() {
     else ui.searchBox.placeholder = placeholders.default;
 }
 
-/** 处理搜索框输入事件 */
+/**
+ * 处理搜索框输入事件，并智能管理浏览器历史记录。
+ */
 function handleSearch() {
     const searchTerm = ui.searchBox.value.toLowerCase().trim();
+    const isNowActive = searchTerm !== '';
+
+    // 状态转换：从无搜索到有搜索
+    if (isNowActive && !wasSearchActive) {
+        // 创建一个历史记录条目来代表“正在搜索”的状态
+        history.pushState({ searchActive: true }, '', window.location.href);
+    }
+    // 状态转换：从有搜索到无搜索（用户手动清空）
+    else if (!isNowActive && wasSearchActive) {
+        // 如果当前历史记录就是我们的“搜索”条目，则通过后退来移除它
+        if (history.state && history.state.searchActive) {
+            history.back();
+        }
+    }
+    wasSearchActive = isNowActive; // 更新状态
+
+    // 执行过滤逻辑
     let filteredMovies;
     if (!searchTerm) {
         filteredMovies = data.fullMovies;
@@ -473,6 +493,27 @@ function handleSearch() {
     data.scroller.instance.dataArray = filteredMovies;
     data.scroller.instance.reset();
     data.scroller.instance.loadNextBatch();
+}
+
+/**
+ * 处理浏览器的后退事件 (popstate)。
+ * 优先关闭模态框。如果无模态框，则检查是否应清空搜索。
+ */
+function handlePopState(event) {
+    // 1. 优先处理模态框
+    const didCloseOverlay = hideAllOverlays(true);
+    if (didCloseOverlay) {
+        return; // 模态框被关闭，任务完成
+    }
+
+    // 2. 如果没有模态框，则处理搜索状态
+    // 当 popstate 触发时，表示历史记录已改变。如果此时搜索框仍有内容，
+    // 说明用户是从“搜索激活”状态后退的，UI需要同步更新以反映这个变化。
+    if (ui.searchBox.value.trim() !== '') {
+        ui.searchBox.value = '';
+        // 触发 handleSearch 来更新 UI 并同步 wasSearchActive 状态
+        handleSearch();
+    }
 }
 
 
@@ -504,7 +545,8 @@ export function setupEventListeners() {
     ui.playerModal.addEventListener('click', e => { if (e.target === ui.playerModal) hideAllOverlays(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') hideAllOverlays(); });
 
-    window.addEventListener('popstate', () => hideAllOverlays(true));
+    // 监听 popstate 事件以处理浏览器后退按钮
+    window.addEventListener('popstate', handlePopState);
 
     ui.searchBox.addEventListener('input', handleSearch);
 
