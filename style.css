@@ -1,17 +1,19 @@
-/* --- GLOBAL STYLES & CSS VARIABLES --- */
+/* ========================================================================= */
+/* --- 区域: 全局样式 & CSS 变量 --- */
+/* ========================================================================= */
 :root {
-    --color-background: #141414;
-    --color-surface: #1e1e1e;
-    --color-primary: #e50914;
-    --color-text-primary: #f5f5f5;
-    --color-text-secondary: #a0a0a0;
-    --color-border: #303030;
-    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --border-radius: 8px;
-    --transition-speed: 0.2s;
+    --color-background: #141414;      /* 主要背景色 */
+    --color-surface: #1e1e1e;         /* 卡片、输入框等表面颜色 */
+    --color-primary: #e50914;         /* 主题色 (品牌红) */
+    --color-text-primary: #f5f5f5;    /* 主要文字颜色 */
+    --color-text-secondary: #a0a0a0; /* 次要文字颜色 (描述、元数据等) */
+    --color-border: #303030;          /* 边框颜色 */
+    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; /* 全局字体栈 */
+    --border-radius: 8px;             /* 全局圆角大小 */
+    --transition-speed: 0.2s;         /* 全局过渡动画速度 */
 }
 
-/* Universal box-sizing and reset */
+/* 通用盒模型重置 */
 *, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
@@ -20,8 +22,8 @@
 
 html {
     font-size: 16px;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    -webkit-font-smoothing: antialiased; /* 字体抗锯齿 (Chrome, Safari) */
+    -moz-osx-font-smoothing: grayscale;  /* 字体抗锯齿 (Firefox) */
 }
 
 body {
@@ -29,18 +31,16 @@ body {
     color: var(--color-text-primary);
     font-family: var(--font-family);
     line-height: 1.6;
-    /* 关键：防止任何情况下出现水平滚动条 */
-    overflow-x: hidden;
+    overflow-x: hidden; /* 关键: 防止任何情况下出现水平滚动条 */
 }
 
-/* START 新增：防止模态框打开时页面滚动 */
+/* 当模态框打开时，禁止body滚动 */
 body.body-no-scroll {
     overflow: hidden;
 }
-/* END 新增：防止模态框打开时页面滚动 */
 
 h1, h2, h3, h4 {
-    color: #e50914;
+    color: var(--color-primary);
     line-height: 1.3;
     margin-bottom: 0.75rem;
 }
@@ -66,7 +66,7 @@ img {
     display: block;
 }
 
-/* Custom scrollbar for a better dark-mode experience */
+/* 自定义滚动条样式，提升暗色模式体验 */
 ::-webkit-scrollbar {
     width: 10px;
 }
@@ -82,7 +82,9 @@ img {
 }
 
 
-/* --- HEADER --- */
+/* ========================================================================= */
+/* --- 区域: 头部 (HEADER) --- */
+/* ========================================================================= */
 header {
     display: flex;
     justify-content: space-between;
@@ -90,9 +92,9 @@ header {
     padding: 1.5rem 2rem;
     background-color: rgba(20, 20, 20, 0.8);
     border-bottom: 1px solid var(--color-border);
-    position: sticky;
+    position: sticky; /* 粘性定位，实现滚动时固定在顶部 */
     top: 0;
-    z-index: 100;
+    z-index: 100; /* 确保在内容之上 */
 }
 
 #search-box {
@@ -109,15 +111,18 @@ header {
 #search-box:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.3);
+    box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.3); /* 聚焦时发光效果 */
 }
 
 
-/* --- MAIN CONTENT & GRID --- */
+/* ========================================================================= */
+/* --- 区域: 主内容 & 网格布局 (MAIN & GRID) --- */
+/* ========================================================================= */
 main {
     padding: 1rem 2rem;
 }
 
+/* 筛选状态栏 */
 #filter-status {
     display: flex;
     align-items: center;
@@ -148,12 +153,15 @@ main {
     color: white;
 }
 
+/* 媒体卡片网格容器 */
 .grid-container {
     display: grid;
+    /* 响应式网格：自动填充，每列最小180px，最大1fr (平均分配剩余空间) */
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 1.5rem 1rem;
 }
 
+/* 媒体卡片 */
 .card {
     background-color: var(--color-surface);
     border-radius: var(--border-radius);
@@ -161,22 +169,23 @@ main {
     position: relative;
     cursor: pointer;
     transition: transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
-    aspect-ratio: 2 / 3; /* Maintain aspect ratio */
+    aspect-ratio: 2 / 3; /* 保持 2:3 的宽高比 */
 }
 
 .card:hover {
     transform: scale(1.05);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-    z-index: 10;
+    z-index: 10; /* 悬停时提升层级，防止被其他卡片遮挡 */
 }
 
 .card img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
-    background-color: var(--color-surface); /* Placeholder color */
+    object-fit: cover; /* 保证图片填满容器且不变形 */
+    background-color: var(--color-surface); /* 图片加载前的占位背景色 */
 }
 
+/* 卡片标题遮罩 */
 .title-overlay {
     position: absolute;
     bottom: 0;
@@ -187,15 +196,16 @@ main {
     padding: 2rem 0.75rem 0.75rem;
     font-size: 0.9rem;
     font-weight: bold;
-    opacity: 0;
+    opacity: 0; /* 默认隐藏 */
     transition: opacity var(--transition-speed) ease;
     text-align: center;
 }
 
 .card:hover .title-overlay {
-    opacity: 1;
+    opacity: 1; /* 悬停时显示 */
 }
 
+/* 加载指示器 */
 #loading-indicator {
     text-align: center;
     padding: 2rem;
@@ -204,18 +214,20 @@ main {
 }
 
 
-/* --- MODAL (DETAILS) --- */
+/* ========================================================================= */
+/* --- 区域: 模态框-详情 (MODAL-DETAILS) --- */
+/* ========================================================================= */
 .modal {
-    display: none;
+    display: none; /* JS控制显示 */
     position: fixed;
     z-index: 1000;
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
-    overflow: auto;
+    overflow: auto; /* 内容过多时允许滚动 */
     background-color: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px); /* 背景模糊效果 */
 }
 
 .modal-content {
@@ -236,28 +248,28 @@ main {
     right: 25px;
     font-size: 32px;
     font-weight: bold;
-    z-index: 2;
+    z-index: 2; /* 确保在背景图之上 */
     transition: color var(--transition-speed) ease;
+    cursor: pointer;
 }
-
 .close-button:hover,
 .close-button:focus {
     color: white;
     text-decoration: none;
-    cursor: pointer;
 }
 
+/* 详情页顶部背景图 (Fanart) */
 .fanart-bg {
     height: 300px;
     background-size: cover;
     background-position: center 20%;
     position: relative;
 }
-
+/* 背景图渐变遮罩，使底部与页面背景融合 */
 .fanart-bg::after {
     content: '';
     position: absolute;
-    inset: 0;
+    inset: 0; /* top:0, right:0, bottom:0, left:0 */
     background: linear-gradient(to top, var(--color-background) 0%, rgba(20, 20, 20, 0.2) 100%);
 }
 
@@ -265,7 +277,7 @@ main {
     display: flex;
     gap: 2rem;
     padding: 0 2rem;
-    margin-top: -120px;
+    margin-top: -120px; /* 向上移动，与背景图重叠 */
     position: relative;
     z-index: 1;
 }
@@ -274,7 +286,6 @@ main {
     flex-shrink: 0;
     width: 180px;
 }
-
 .details-poster img {
     border-radius: var(--border-radius);
     border: 3px solid var(--color-background);
@@ -304,7 +315,6 @@ main {
 .details-body {
     padding: 2rem;
 }
-
 .details-body > div:not(:last-child) {
     margin-bottom: 2rem;
 }
@@ -313,11 +323,12 @@ main {
     color: var(--color-text-secondary);
 }
 
+/* 演职员/制片厂列表 */
 .cast-list, .studio-list {
     display: flex;
-    overflow-x: auto;
+    overflow-x: auto; /* 水平滚动 */
     gap: 1rem;
-    padding-bottom: 1rem; /* for scrollbar */
+    padding-bottom: 1rem; /* 为滚动条留出空间 */
 }
 
 .cast-member {
@@ -345,34 +356,34 @@ main {
 .studio-list {
     align-items: center;
 }
-.studio-item { /* MODIFIED: Added styles for the container */
-    display: flex; /* Make it a flex container to center the image */
+/* 制片厂Logo容器 */
+.studio-item {
+    display: flex;
     justify-content: center;
     align-items: center;
-    padding: 0.5rem; /* Add padding around the logo */
-    background-color: var(--color-surface); /* Background for visibility */
-    border: 1px solid var(--color-border); /* A subtle border */
-    border-radius: var(--border-radius); /* Rounded corners */
-    transition: all var(--transition-speed) ease; /* Smooth transition for hover effects */
-    min-width: 80px; /* Ensure a minimum width for the container */
-    height: 80px; /* Consistent height for the container */
-    box-sizing: border-box; /* Include padding and border in the element's total width and height */
-    flex-shrink: 0; /* Prevent items from shrinking below their content size */
+    padding: 0.5rem;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    transition: all var(--transition-speed) ease;
+    min-width: 80px;
+    height: 80px;
+    flex-shrink: 0;
 }
 .studio-item img {
     max-height: 50px;
-    max-width: 100%; /* Ensure image fits within its container */
+    max-width: 100%;
     width: auto;
-    object-fit: contain; /* Scale content to fit within the container, maintaining aspect ratio */
-    /* transition: filter var(--transition-speed) ease; */ /* Removed as the container handles the main transition */
+    object-fit: contain; /* 保持Logo比例并完整显示 */
 }
-.studio-item:hover { /* MODIFIED: Added gradient, shadow, and transform on hover */
-    background: linear-gradient(to right, var(--color-primary), #a0060e); /* Gradient background */
-    box-shadow: 0 4px 15px rgba(229, 9, 20, 0.4); /* Shadow using primary color */
-    transform: translateY(-3px); /* Subtle lift effect */
-    border-color: var(--color-primary); /* Change border color */
+.studio-item:hover {
+    background: linear-gradient(to right, var(--color-primary), #a0060e);
+    box-shadow: 0 4px 15px rgba(229, 9, 20, 0.4);
+    transform: translateY(-3px);
+    border-color: var(--color-primary);
 }
 
+/* 电影版本列表 */
 #modal-versions {
     display: flex;
     flex-direction: column;
@@ -392,7 +403,9 @@ main {
 }
 
 
-/* TV Show Specific Styles for Modal */
+/* ========================================================================= */
+/* --- 区域: 电视剧相关样式 (TV SHOWS) --- */
+/* ========================================================================= */
 .season-tabs {
     display: flex;
     flex-wrap: wrap;
@@ -401,7 +414,6 @@ main {
     border-bottom: 1px solid var(--color-border);
     padding-bottom: 1rem;
 }
-
 .season-tab-button {
     background-color: var(--color-surface);
     color: var(--color-text-secondary);
@@ -411,12 +423,10 @@ main {
     cursor: pointer;
     transition: all var(--transition-speed) ease;
 }
-
 .season-tab-button:hover {
     background-color: #2a2a2a;
     color: var(--color-text-primary);
 }
-
 .season-tab-button.active {
     background-color: var(--color-primary);
     color: white;
@@ -425,7 +435,7 @@ main {
 
 .episode-list-container {
     overflow-y: auto;
-    padding-right: 10px; /* Space for scrollbar */
+    padding-right: 10px; /* 为滚动条留出空间 */
 }
 .episode-list {
     list-style: none;
@@ -441,9 +451,8 @@ main {
     border-radius: var(--border-radius);
     transition: background-color var(--transition-speed) ease;
 }
-.episode-item:hover {
-    background-color: #2a2a2a;
-}
+.episode-item:hover { background-color: #2a2a2a; }
+
 .episode-info strong {
     display: block;
     font-size: 1rem;
@@ -464,9 +473,7 @@ main {
     white-space: nowrap;
     transition: opacity var(--transition-speed) ease;
 }
-.play-episode-button:hover {
-    opacity: 0.8;
-}
+.play-episode-button:hover { opacity: 0.8; }
 
 .pagination-controls {
     display: flex;
@@ -495,15 +502,16 @@ main {
 }
 
 
-/* --- MODAL (PLAYER & SETTINGS) --- */
+/* ========================================================================= */
+/* --- 区域: 模态框-小型 (MODAL-SMALL: Player, etc.) --- */
+/* ========================================================================= */
 .modal-small {
-    display: none;
     position: fixed;
-    z-index: 1001;
+    z-index: 1001; /* 比详情模态框更高 */
     left: 0; top: 0; width: 100%; height: 100%;
     background-color: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(5px);
-    display: none;
+    display: none; /* JS控制，但使用flex居中 */
     align-items: center;
     justify-content: center;
 }
@@ -571,7 +579,9 @@ main {
 .path-display button:hover { background-color: #444; }
 
 
-/* --- SETTINGS PANEL --- */
+/* ========================================================================= */
+/* --- 区域: 设置面板 (SETTINGS PANEL) --- */
+/* ========================================================================= */
 .global-button {
     position: fixed;
     bottom: 20px;
@@ -584,7 +594,7 @@ main {
     border-radius: 50%;
     font-size: 24px;
     cursor: pointer;
-    z-index: 999;
+    z-index: 999; /* 低于模态框，但高于普通内容 */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -604,21 +614,23 @@ main {
     max-width: 400px;
     height: 100%;
     background-color: var(--color-background);
-    z-index: 1002;
-    transform: translateX(100%);
+    z-index: 1002; /* 最高层级 */
+    transform: translateX(100%); /* 默认移出屏幕外 */
     transition: transform 0.3s ease-in-out;
     display: flex;
     flex-direction: column;
     border-left: 1px solid var(--color-border);
 }
 #settings-panel.open {
-    transform: translateX(0);
+    transform: translateX(0); /* 滑入屏幕 */
 }
+
+/* 设置面板背景遮罩 */
 #settings-overlay {
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.5);
-    z-index: 1001;
+    z-index: 1001; /* 在设置面板之下，其他所有内容之上 */
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.3s ease-in-out;
@@ -682,7 +694,10 @@ main {
 }
 .delete-url-button:hover { background-color: var(--color-primary); color: white; }
 
-.button-add-item, #build-search-index-button, #load-tvshows-button { /* 增加了 #build-search-index-button, #load-tvshows-button */
+/* 合并设置中的通用按钮样式 */
+.button-add-item,
+#build-search-index-button,
+#load-tvshows-button {
     background-color: transparent;
     border: 1px solid var(--color-border);
     color: var(--color-text-primary);
@@ -691,19 +706,24 @@ main {
     cursor: pointer;
     transition: all var(--transition-speed) ease;
 }
-.button-add-item:hover, #build-search-index-button:hover, #load-tvshows-button:hover { /* 增加了 #build-search-index-button, #load-tvshows-button */
+.button-add-item:hover,
+#build-search-index-button:hover,
+#load-tvshows-button:hover {
     background-color: var(--color-surface);
     border-color: #555;
 }
-#build-search-index-button:disabled, #load-tvshows-button:disabled { /* 针对新按钮的禁用样式 */
+#build-search-index-button:disabled,
+#load-tvshows-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     background-color: #333;
     border-color: #444;
 }
 
-
-#save-status, #index-status, #tvshows-status { /* 增加了 #tvshows-status */
+/* 合并设置中的状态文本样式 */
+#save-status,
+#index-status,
+#tvshows-status {
     display: inline-block;
     margin-left: 1rem;
     font-size: 0.9rem;
@@ -714,7 +734,9 @@ main {
     line-height: 1.8;
 }
 
-/* --- TOAST NOTIFICATION --- */
+/* ========================================================================= */
+/* --- 区域: 提示通知 (TOAST NOTIFICATION) --- */
+/* ========================================================================= */
 .toast {
     visibility: hidden;
     min-width: 250px;
@@ -724,7 +746,7 @@ main {
     border-radius: var(--border-radius);
     padding: 1rem;
     position: fixed;
-    z-index: 2000;
+    z-index: 2000; /* 最高层级，确保可见 */
     left: 50%;
     bottom: 30px;
     transform: translateX(-50%);
@@ -738,21 +760,19 @@ main {
     bottom: 50px;
 }
 
-/* --- UTILITY CLASSES --- */
-.body-no-scroll {
-    overflow: hidden;
-}
 
+/* ========================================================================= */
+/* --- 区域: 工具类 (UTILITY CLASSES) --- */
+/* ========================================================================= */
 .error-text {
     color: var(--color-text-secondary);
     font-style: italic;
 }
 
-body.body-no-scroll {
-    overflow: hidden;
-}
 
-/* --- RESPONSIVE ADJUSTMENTS --- */
+/* ========================================================================= */
+/* --- 区域: 响应式调整 (RESPONSIVE) --- */
+/* ========================================================================= */
 @media (max-width: 768px) {
     header {
         flex-direction: column;
@@ -765,12 +785,13 @@ body.body-no-scroll {
     main {
         padding: 1rem;
     }
+
     .modal-content {
         width: 95%;
         margin: 2.5% auto;
     }
     .fanart-bg {
-        height: 200px; /* Adjust height for smaller screens */
+        height: 200px;
     }
     .details-header {
         flex-direction: column;
@@ -781,9 +802,8 @@ body.body-no-scroll {
     .details-title-section {
         padding-top: 1rem;
     }
+
     #settings-panel {
         max-width: 90%;
-    }
-    .episode-list-container {
     }
 }

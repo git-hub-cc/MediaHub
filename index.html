@@ -11,95 +11,98 @@
 </head>
 <body>
 
-<!-- 新增：设置按钮 -->
+<!-- ========================================================================= -->
+<!-- ======================= 区域: 设置面板与全局按钮 ======================= -->
+<!-- ========================================================================= -->
+
+<!-- 全局设置按钮 -->
 <button id="settings-button" class="global-button" title="设置">⚙️</button>
 
-<!-- 修改：设置侧边栏 -->
+<!-- 设置侧边栏面板 -->
 <div id="settings-panel">
+  <!-- 设置面板头部 -->
   <div class="settings-header">
     <h2>设置</h2>
     <button id="settings-close-button" class="close-button-small">×</button>
   </div>
+  <!-- 设置面板内容区域 -->
   <div class="settings-content">
+    <!-- 播放路径配置 -->
     <div class="setting-item">
       <label>资源播放路径 (可配置多个)</label>
       <p class="setting-description">配置一个或多个备用播放路径，将轮流替换 strm 文件中的默认前缀 (http://xiaoya.host:5678)。</p>
-      <div id="base-url-list">
-        <!-- URL items will be dynamically inserted here by JS -->
-      </div>
+      <div id="base-url-list"><!-- 动态插入 URL 输入框 --></div>
       <button id="add-base-url-button" class="button-add-item">+ 新增路径</button>
       <span id="save-status"></span>
     </div>
 
-    <!-- START 新增：加载电视剧模块 -->
+    <!-- 加载电视剧数据模块 -->
     <div class="setting-item">
       <label>加载电视剧数据</label>
-      <p class="setting-description">
-        默认仅加载电影数据，点击按钮可额外加载电视剧数据，合并到您的媒体库中。
-        此操作可能需要一些时间，取决于您的电视剧数据量。
-      </p>
+      <p class="setting-description">默认仅加载电影数据，点击按钮可额外加载电视剧数据，合并到您的媒体库中。此操作可能需要一些时间，取决于您的电视剧数据量。</p>
       <button id="load-tvshows-button" class="button-add-item">加载电视剧数据</button>
       <span id="tvshows-status"></span>
     </div>
-    <!-- END 新增：加载电视剧模块 -->
 
-    <!-- START 新增：搜索索引构建模块 -->
+    <!-- 搜索索引构建模块 -->
     <div class="setting-item">
       <label>增强搜索索引</label>
-      <p class="setting-description">
-        点击按钮解析所有影视的 NFO 元数据（演员、制片厂等），以启用更强大的搜索功能。
-        此操作可能需要一些时间，取决于您的媒体库大小。
-      </p>
+      <p class="setting-description">点击按钮解析所有影视的 NFO 元数据（演员、制片厂等），以启用更强大的搜索功能。此操作可能需要一些时间，取决于您的媒体库大小。</p>
       <button id="build-search-index-button" class="button-add-item">构建搜索索引</button>
       <span id="index-status"></span>
     </div>
-    <!-- END 新增：搜索索引构建模块 -->
 
-    <!-- START 新增：关于 MediaHub 模块 -->
+    <!-- 关于信息模块 -->
     <div class="setting-item">
       <label>关于 MediaHub</label>
-      <p class="setting-description">
-        MediaHub 是一个纯前端、无后端的静态媒体库浏览器项目。
-        您可以在 <a href="https://github.com/git-hub-cc/MediaHub" target="_blank" rel="noopener noreferrer">GitHub</a> 上找到本项目的源代码、提交问题或贡献力量。
-      </p>
+      <p class="setting-description">MediaHub 是一个纯前端、无后端的静态媒体库浏览器项目。您可以在 <a href="https://github.com/git-hub-cc/MediaHub" target="_blank" rel="noopener noreferrer">GitHub</a> 上找到本项目的源代码、提交问题或贡献力量。</p>
     </div>
-    <!-- END 新增：关于 MediaHub 模块 -->
 
+    <!-- 致谢信息模块 -->
     <div class="setting-item acknowledgments-section">
       <label>数据来源与致谢</label>
-      <p class="setting-description">
-        本站展示的媒体数据主要来源于
-        <a href="https://xiaoyaliu.notion.site/xiaoya-docker-69404af849504fa5bcf9f2dd5ecaa75f" target="_blank" rel="noopener noreferrer">小雅 AList</a>，
-        刮削元数据（封面、简介等）来自
-        <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">The Movie DB (TMDB)</a>。
-        衷心感谢他们的卓越贡献。
-      </p>
+      <p class="setting-description">本站展示的媒体数据主要来源于 <a href="https://xiaoyaliu.notion.site/xiaoya-docker-69404af849504fa5bcf9f2dd5ecaa75f" target="_blank" rel="noopener noreferrer">小雅 AList</a>，刮削元数据（封面、简介等）来自 <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">The Movie DB (TMDB)</a>。衷心感谢他们的卓越贡献。</p>
     </div>
   </div>
 </div>
-<!-- 新增：设置面板遮罩 -->
+<!-- 设置面板背景遮罩 -->
 <div id="settings-overlay"></div>
 
+
+<!-- ========================================================================= -->
+<!-- ========================== 区域: 页面头部 ============================= -->
+<!-- ========================================================================= -->
 <header>
   <h1><a href="#">MediaHub</a></h1>
   <nav>
-    <!-- MODIFIED: Initial placeholder text -->
     <input type="search" id="search-box" placeholder="搜索电影...">
   </nav>
 </header>
 
+
+<!-- ========================================================================= -->
+<!-- ========================== 区域: 主内容区域 =========================== -->
+<!-- ========================================================================= -->
 <main>
+  <!-- 筛选状态显示条 -->
   <div id="filter-status" style="display: none;">
     <span id="filter-text"></span>
     <button id="clear-filter" title="清除筛选">×</button>
   </div>
+  <!-- 媒体网格容器 -->
   <div id="grid-container-wrapper">
     <div id="movie-grid" class="grid-container"></div>
   </div>
+  <!-- 加载指示器 -->
   <div id="loading-indicator">正在加载更多...</div>
 </main>
 
-<!-- 详情弹窗 Modal -->
+
+<!-- ========================================================================= -->
+<!-- ======================= 区域: 模态框 (Modals) ========================= -->
+<!-- ========================================================================= -->
+
+<!-- 影视详情弹窗 -->
 <div id="details-modal" class="modal">
   <span class="close-button">×</span>
   <div class="modal-content">
@@ -118,7 +121,7 @@
       <div id="modal-cast"></div>
       <div id="modal-studios"></div>
       <div id="modal-stream-details"></div>
-      <!-- This div will now dynamically hold either movie versions or TV show seasons/episodes -->
+      <!-- 此容器用于动态展示电影版本或电视剧季/集信息 -->
       <div id="modal-versions"></div>
     </div>
   </div>
@@ -138,15 +141,16 @@
   </div>
 </div>
 
-<!-- Toast 通知 -->
+<!-- 全局Toast通知 -->
 <div id="app-install-toast" class="toast"></div>
 
-<!-- ============================================= -->
-<!--                 HTML 模板                     -->
-<!-- ============================================= -->
+
+<!-- ========================================================================= -->
+<!-- ======================== 区域: HTML 模板 ============================== -->
+<!-- ========================================================================= -->
 <div id="templates" style="display: none;">
 
-  <!-- 电影卡片模板 -->
+  <!-- 媒体卡片模板 -->
   <template id="movie-card-template">
     <div class="card movie-card">
       <img src="" alt="" loading="lazy" onerror="this.onerror=null;this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxODAiIGhlaWdodD0iMjcwIiB2aWV3Qm94PSIwIDAgMTgwIDI3MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzFlMWUxZSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjN2Y3ZjdmIiBmb250LXNpemU9IjE2cHgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGFsaWdubWVudC1iYXNlbGluZT0ibWlkZGxlIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';">
@@ -159,7 +163,7 @@
     <button></button>
   </template>
 
-  <!-- 演员信息模板 -->
+  <!-- 演职人员信息模板 -->
   <template id="cast-member-template">
     <div class="cast-member">
       <img src="" alt="" loading="lazy">
@@ -175,7 +179,7 @@
     </div>
   </template>
 
-  <!-- 可用版本条目模板 -->
+  <!-- 可用版本条目模板 (电影) -->
   <template id="version-item-template">
     <div class="version-item"></div>
   </template>
@@ -188,7 +192,7 @@
     </div>
   </template>
 
-  <!-- Base URL 输入行模板 -->
+  <!-- 播放路径输入行模板 (设置) -->
   <template id="base-url-item-template">
     <div class="base-url-item">
       <input type="text" placeholder="http://example.com:5678">
@@ -198,7 +202,7 @@
 
 </div>
 
-<!-- 引入主JS文件，类型为 "module" -->
+<!-- 引入主JS文件，类型为 "module" 以支持 ES6 模块 -->
 <script type="module" src="js/main.js"></script>
 </body>
 </html>
